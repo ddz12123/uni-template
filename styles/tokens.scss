@@ -1,0 +1,54 @@
+/* 设计令牌（Design Tokens）：
+ * 1. 默认亮色定义在 page 选择器上
+ * 2. 系统暗色时通过 prefers-color-scheme 自动切换（H5 / 小程序 darkmode 均支持）
+ * 3. 手动切换：AppProvider 根节点挂 .theme-light / .theme-dark，优先级高于系统
+ * Wot UI 组件库自身的暗黑令牌（--wot-*）由 @wot-ui/ui 主题文件 + wd-config-provider 联动，见 App.vue。
+ */
+
+page {
+  --app-primary: #4d80f0;
+  --app-danger: #e2231a;
+
+  --app-bg: #f5f6f9;
+  --app-bg-card: #fff;
+
+  --app-text-1: #1a1a1a;
+  --app-text-2: #666;
+  --app-text-3: #999;
+
+  --app-border: #e5e6eb;
+}
+
+@mixin app-dark-vars {
+  --app-bg: #111214;
+  --app-bg-card: #1d1e22;
+
+  --app-text-1: #f0f0f0;
+  --app-text-2: #a8a8a8;
+  --app-text-3: #7a7a7a;
+
+  --app-border: #2c2d31;
+}
+
+/* 跟随系统：系统为暗色时自动生效 */
+@media (prefers-color-scheme: dark) {
+  page {
+    @include app-dark-vars;
+  }
+}
+
+/* 手动切换覆盖层（AppProvider 挂载），与系统主题解耦 */
+.theme-dark {
+  @include app-dark-vars;
+}
+
+.theme-light {
+  --app-bg: #f5f6f9;
+  --app-bg-card: #fff;
+
+  --app-text-1: #1a1a1a;
+  --app-text-2: #666;
+  --app-text-3: #999;
+
+  --app-border: #e5e6eb;
+}

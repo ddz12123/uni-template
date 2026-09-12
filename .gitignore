@@ -1,0 +1,14 @@
+# 编译产物
+unpackage/
+
+# 依赖
+node_modules/
+
+# 日志与本地文件
+*.log
+*.local
+.DS_Store
+
+# IDE
+.idea/
+.hbuilderx/

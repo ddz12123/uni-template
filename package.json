@@ -1,0 +1,24 @@
+{
+  "name": "uni-hbx-enterprise-template",
+  "version": "1.0.0",
+  "private": true,
+  "description": "企业级开箱即用的 uni-app HBuilderX 模板（Vue3 + TS + Pinia + Wot UI v2）",
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vueuse/core": "^14.4.0",
+    "@wot-ui/ui": "^2.3.2",
+    "pinia-plugin-persistedstate": "^4.7.1"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^9.5.1",
+    "@dcloudio/types": "^3.4.12",
+    "eslint": "^9.20.0",
+    "prettier": "^3.4.2",
+    "typescript": "~5.4.5"
+  }
+}
