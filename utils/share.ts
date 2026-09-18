@@ -1,9 +1,11 @@
+import { APP_NAME } from '@/config'
+
 /**
  * 全局分享（mixin 方案）：main.ts 里 `app.mixin(shareMixin)` 一次接入，所有页面生效，
  * 无需逐页处理，也不要逐页处理。
  *
  * 默认行为：
- * - 标题取 VITE_APP_TITLE，路径取当前页（含页面参数），并开启“发送给朋友 / 分享到朋友圈”菜单
+ * - 标题取 manifest.json 的 name，路径取当前页（含页面参数），并开启“发送给朋友 / 分享到朋友圈”菜单
  *
  * 某页需要定制分享内容：
  * - 用 options 写法在页面里覆盖 onShareAppMessage / onShareTimeline 即可（组件选项会覆盖 mixin）
@@ -31,7 +33,7 @@ function getCurrentShareTarget(): { path: string, query: string } {
 }
 
 function defaultTitle(): string {
-  return import.meta.env.VITE_APP_TITLE ?? 'uni-app 企业模板'
+  return APP_NAME
 }
 
 export const shareMixin = {

@@ -5,20 +5,20 @@ HBuilderX 原生工程的 uni-app 空白模板（Vue3 + TS + Pinia + Wot UI v2 +
 
 ## 快速开始
 
-```bash
-npm install
-```
+1. HBuilderX 打开项目根目录。
+2. 首次运行按 HBuilderX 提示启用 SCSS/Sass 编译支持。
+3. 微信小程序在 `manifest.json` 填写 `mp-weixin.appid`。
+4. 根据目标平台填写开发/生产环境的接口地址，并完成平台发布配置。
 
-HBuilderX 打开项目根目录 → 运行（首次提示安装「scss/sass 编译」插件，按提示装）。
-微信小程序需在 `manifest.json` 填 `mp-weixin.appid`。
+本项目以 HBuilderX 为运行和发行入口，不提供 CLI dev/build 流程。仓库中的 npm 命令仅用于可选的代码检查，不影响 HBuilderX 运行。
 
 ## 目录结构
 
 ```
 components/AppProvider.vue   页面根容器：组件库暗黑模式 + 页面主题变量联动
-config/index.ts              全局常量（成功码、超时、版本号取自 manifest.versionName、刷新接口、登录页）
+config/index.ts              全局常量（应用名/版本号取自 manifest、成功码、超时、刷新接口、登录页）
 pages/                       首页 / 我的（tabbar）+ login（401 登出回跳目标，redirect 回原页）
-store/                       pinia + persistedstate；modules: user（登录态）/ app（主题）
+store/                       pinia + persistedstate；modules: user（响应式登录态）/ app（主题）
 styles/                      tokens.scss 设计令牌 / index.scss 全局样式
 types/                       env.d.ts 环境变量类型 / vue-shim.d.ts / uni-app-shim.d.ts
 utils/                       request 请求层 / auth / storage / report（节流上报）/ update（版本更新）/ share（全局分享）/ 工具函数（基于 @vueuse/core）
@@ -40,10 +40,17 @@ token 自动注入（`/auth/login` 与刷新接口免带）；401 自动单飞�
 刷新失败清登录态并 `reLaunch` 到登录页（已在登录页不再跳转，登录成功后按 `redirect` 回跳）。
 接口约定改 `config/index.ts` 的 `SUCCESS_CODE` / `REFRESH_TOKEN_URL`。
 
-### 登录态（store/modules/user.ts）
+### 登录页与登录态
 
-登录接口接入后调用 `setToken(token, refreshToken)`，用户信息维护到 `userInfo`；
-`persist.pick` 的字段自动持久化到 uni storage。
+模板不包含登录接口和假登录逻辑。`pages/login/login.vue` 只保留页面占位和跳转说明。
+请求层检测到登录失效时，会跳转到登录页并携带 `redirect` 参数；接入真实登录后，在登录页完成以下流程：
+
+1. 调用登录接口。
+2. 调用 `useUserStore().setToken(token, refreshToken)` 保存令牌。
+3. 将用户信息写入 `userInfo`。
+4. 使用 `uni.reLaunch({ url: redirect || '/pages/index/index' })` 回到原页面。
+
+令牌只由 `utils/auth.ts` 持久化，Pinia 中的 `token` / `refreshToken` 只是响应式镜像；Pinia 只持久化 `userInfo`，避免出现两套登录态。
 
 ### 全局分享（utils/share.ts）
 
@@ -74,19 +81,23 @@ export default {
 ### 主题
 
 - `uni.scss`：编译期变量（`$app-*`），保留官方 `$uni-*` 兼容市场插件
-- `styles/tokens.scss`：运行时变量（`--app-*`），暗黑经媒体查询 + `.theme-dark` 覆盖层
+- `styles/tokens.scss`：运行时变量（`--app-*`），暗黑经媒体查询 + `.app-theme-dark` 覆盖层
 - `theme.json`：原生导航栏 / tabBar 深色（跟随系统）
-- 组件库暗黑由 `AppProvider` 的 `wd-config-provider` 联动
+- 组件库暗黑由 `AppProvider` 的 `wd-config-provider` 联动；调用 `useAppStore().setTheme()` 时会同步原生导航栏和 tabBar
+
+### 应用名称
+
+应用名称唯一维护在 `manifest.json` 的 `name` 字段。分享标题和运行时代码从 `config/index.ts` 的 `APP_NAME` 读取；不要再新增 `VITE_APP_TITLE`。
 
 ### 环境变量
 
 | 变量 | 说明 |
 | --- | --- |
 | `VITE_APP_BASE_URL` | 接口地址（「运行」加载 `.env.development`，「发行」加载 `.env.production`） |
-| `VITE_APP_TITLE` | 应用标题 |
 | `VITE_REPORT_URL` | 日志上报地址，留空只打印 |
 
 代码中 `import.meta.env.VITE_XXX` 访问。
+本地环境文件不要提交到 Git，复制 `.env.example` 后按 HBuilderX 的运行/发行环境命名并填写。
 
 ### H5 跨域联调（vite 反向代理）
 
@@ -97,5 +108,39 @@ H5 联调时把 `.env.development` 的 `VITE_APP_BASE_URL` 改为 `'/api'` 即�
 ## 常见问题
 
 - easycom 规则（`pages.json`）修改后需重启 HBuilderX 运行
-- scss 报找不到 `@wot-ui/ui` 包路径：先执行 `npm install`（已改为相对路径直引，一般不再需要手动改）
-- 工程化命令（可选，不影响编译运行）：`npm run lint` / `npm run format` / `npm run typecheck`
+- 页面使用 Wot UI 反馈类 hooks 时，需要在当前页面显式挂载对应的 `wd-toast` / `wd-dialog` 实例
+- 工程化命令（可选，不影响 HBuilderX 运行）：`npm run lint` / `npm run format` / `npm run typecheck`
+
+## 新页面约定
+
+新页面保持统一的根结构，确保主题变量和 Wot UI 暗黑模式生效：
+
+```vue
+<script setup lang="ts">
+import AppProvider from '@/components/AppProvider.vue'
+</script>
+
+<template>
+  <AppProvider>
+    <view class="page" />
+  </AppProvider>
+</template>
+```
+
+页面私有样式写在页面自身；全局只保留页面基础样式和 `.app-safe-bottom`，避免新增无前缀的 `.card`、`.title` 等通用类名。
+
+## 新项目初始化清单
+
+- 修改 `manifest.json.name`，它是应用名称唯一来源。
+- 填写微信小程序 `mp-weixin.appid`，并检查目标平台的包名、签名和隐私协议配置。
+- 按环境填写接口地址；开发代理只用于 H5 联调。
+- 接入真实登录后，删除登录页占位文案并实现 `redirect` 回跳。
+- 确认是否启用全局分享、错误上报和小程序版本更新；不需要时移除对应初始化调用。
+
+## 发布前检查
+
+- H5、微信小程序和 App 均能正常启动。
+- 浅色、深色和手动主题下，页面、Wot UI、导航栏、TabBar 颜色一致。
+- 登录失效能跳转登录页，登录成功能回到 `redirect` 指向的页面。
+- 生产环境开启平台域名校验，并核对接口域名和隐私配置。
+- 不提交 `.env`、`.env.development`、`.env.production` 等本地环境文件。

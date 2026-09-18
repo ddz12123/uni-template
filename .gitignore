@@ -9,6 +9,11 @@ node_modules/
 *.local
 .DS_Store
 
+# 本地环境配置（提交 .env.example）
+.env
+.env.*
+!.env.example
+
 # IDE
 .idea/
 .hbuilderx/

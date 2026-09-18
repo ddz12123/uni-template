@@ -4,8 +4,6 @@
  * 业务代码统一通过 import.meta.env.VITE_XXX 访问。
  */
 interface ImportMetaEnv {
-  /** 应用标题 */
-  readonly VITE_APP_TITLE: string
   /** 接口基础地址 */
   readonly VITE_APP_BASE_URL: string
   /** 错误/日志上报地址（可选） */

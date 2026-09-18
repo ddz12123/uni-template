@@ -61,7 +61,6 @@
     "usingComponents": true
   },
   "h5": {
-    "title": "uni-app 企业模板",
     "router": {
       "mode": "hash"
     }

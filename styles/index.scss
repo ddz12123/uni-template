@@ -1,6 +1,6 @@
 /* 全局样式入口：由 App.vue 引入一次，全端生效 */
-// 用相对路径直引 node_modules，避免 HBuilderX 自带 sass 插件解析 `@` / `~` 别名失败
-// （需先执行 npm install；若升级 wot-ui 后路径变化，按报错提示同步即可）。
+// 用相对路径直引组件库主题，避免 HBuilderX 自带 Sass 编译器解析 `@` / `~` 别名失败。
+// 升级组件库后若资源路径变化，只需同步这一处。
 @use '../node_modules/@wot-ui/ui/styles/theme/index.scss' as *;
 @use './tokens.scss';
 
@@ -11,30 +11,8 @@ page {
   font-size: 28rpx;
 }
 
-/* 常用工具类 */
-.card {
-  background-color: var(--app-bg-card);
-  border-radius: 16rpx;
-  padding: 32rpx;
-}
-
-.text-secondary {
-  color: var(--app-text-2);
-}
-
-.text-tertiary {
-  color: var(--app-text-3);
-}
-
 /* 底部安全区适配（tabbar 页面、底部操作栏） */
-.safe-bottom {
+.app-safe-bottom {
   padding-bottom: constant(safe-area-inset-bottom);
   padding-bottom: env(safe-area-inset-bottom);
-}
-
-/* 列表底部提示 */
-.list-tip {
-  padding: 32rpx 0;
-  font-size: 24rpx;
-  text-align: center;
 }

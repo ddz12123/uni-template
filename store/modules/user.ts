@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { clearTokens, saveTokens } from '@/utils/auth'
+import { clearTokens, getRefreshToken, getToken, saveTokens } from '@/utils/auth'
 import { AUTH_EVENTS } from '@/utils/request'
 
 export interface UserInfo {
@@ -11,12 +11,12 @@ export interface UserInfo {
 }
 
 /**
- * 登录态容器：token / 用户信息的唯一数据源。
+ * 登录态容器：token 在 auth storage 中持久化，这里只保留响应式镜像；userInfo 由 Pinia 持久化。
  * 登录接口接入后，在登录逻辑中调用 setToken 保存令牌、维护 userInfo 即可。
  */
 export const useUserStore = defineStore('user', () => {
-  const token = ref('')
-  const refreshToken = ref('')
+  const token = ref(getToken())
+  const refreshToken = ref(getRefreshToken())
   const userInfo = ref<UserInfo | null>(null)
 
   const isLogged = computed(() => !!token.value)
@@ -33,7 +33,7 @@ export const useUserStore = defineStore('user', () => {
     token.value = ''
     refreshToken.value = ''
     userInfo.value = null
-    // store 是登录态唯一数据源的内存侧，磁盘侧 token 也一并清理，
+    // 清空响应式登录态，磁盘侧 token 也一并清理，
     // 避免只调 reset() 时 uni storage 里残留旧 token。
     clearTokens()
   }
@@ -54,18 +54,16 @@ export const useUserStore = defineStore('user', () => {
   }
 }, {
   persist: {
-    pick: ['token', 'refreshToken', 'userInfo'],
+    pick: ['userInfo'],
   },
 })
 
 /**
  * 请求层事件与 store 的同步桥（模块级只注册一次）：
  * 此前写在 setup 内会导致每次 useUserStore() 都重复 uni.$on。
- * handler 内按需取当前 store 实例；先 $off 再 $on，HMR 重载也不会叠加监听。
+ * handler 内按需取当前 store 实例；只移除本模块自己的 handler，避免清空其他模块的同名事件。
  */
-uni.$off(AUTH_EVENTS.refreshed)
-uni.$off(AUTH_EVENTS.logout)
-uni.$on(AUTH_EVENTS.refreshed, (payload: unknown) => {
+function handleTokenRefreshed(payload: unknown) {
   const data = payload as { token: string, refreshToken?: string }
   if (!data || typeof data.token !== 'string') {
     return
@@ -75,7 +73,13 @@ uni.$on(AUTH_EVENTS.refreshed, (payload: unknown) => {
   if (data.refreshToken) {
     store.refreshToken = data.refreshToken
   }
-})
-uni.$on(AUTH_EVENTS.logout, () => {
+}
+
+function handleAuthLogout() {
   useUserStore().reset()
-})
+}
+
+uni.$off(AUTH_EVENTS.refreshed, handleTokenRefreshed)
+uni.$off(AUTH_EVENTS.logout, handleAuthLogout)
+uni.$on(AUTH_EVENTS.refreshed, handleTokenRefreshed)
+uni.$on(AUTH_EVENTS.logout, handleAuthLogout)

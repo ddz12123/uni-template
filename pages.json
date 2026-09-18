@@ -29,7 +29,6 @@
   ],
   "globalStyle": {
     "navigationBarTextStyle": "@navTxtStyle",
-    "navigationBarTitleText": "uni-app 企业模板",
     "navigationBarBackgroundColor": "@navBgColor",
     "backgroundColor": "@bgColor"
   },

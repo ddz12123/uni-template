@@ -1,8 +1,19 @@
 import { usePreferredDark } from '@vueuse/core'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
+import themeConfig from '@/theme.json'
 
 export type ThemeMode = 'light' | 'dark' | 'auto'
+
+interface NativeThemeConfig {
+  navBgColor: string
+  navTxtStyle: 'black' | 'white'
+  tabBgColor: string
+  tabColor: string
+  tabSelectedColor: string
+}
+
+const nativeThemes = themeConfig as Record<'light' | 'dark', NativeThemeConfig>
 
 export const useAppStore = defineStore('app', () => {
   /** 用户设置的主题模式（跟随系统/浅色/深色） */
@@ -16,8 +27,28 @@ export const useAppStore = defineStore('app', () => {
     theme.value === 'auto' ? systemTheme.value : theme.value,
   )
 
+  function syncNativeTheme(mode: 'light' | 'dark') {
+    const currentTheme = nativeThemes[mode]
+    try {
+      uni.setNavigationBarColor?.({
+        frontColor: currentTheme.navTxtStyle === 'white' ? '#ffffff' : '#000000',
+        backgroundColor: currentTheme.navBgColor,
+      })
+      uni.setTabBarStyle?.({
+        color: currentTheme.tabColor,
+        selectedColor: currentTheme.tabSelectedColor,
+        backgroundColor: currentTheme.tabBgColor,
+        borderStyle: mode === 'dark' ? 'white' : 'black',
+      })
+    }
+    catch {
+      // 当前平台没有原生导航栏或 TabBar 时忽略
+    }
+  }
+
   function setTheme(mode: ThemeMode) {
     theme.value = mode
+    syncNativeTheme(resolvedTheme.value)
   }
 
   /** App 启动时调用：读取系统信息并注册主题变化监听 */
@@ -36,6 +67,7 @@ export const useAppStore = defineStore('app', () => {
       const prefersDark = usePreferredDark()
       const applySystemTheme = (value: boolean) => {
         systemTheme.value = value ? 'dark' : 'light'
+        syncNativeTheme(resolvedTheme.value)
       }
       applySystemTheme(prefersDark.value)
       watch(prefersDark, applySystemTheme)
@@ -56,6 +88,7 @@ export const useAppStore = defineStore('app', () => {
       uni.onThemeChange?.((res) => {
         if (res && (res.theme === 'light' || res.theme === 'dark')) {
           systemTheme.value = res.theme
+          syncNativeTheme(resolvedTheme.value)
         }
       })
     }
@@ -63,6 +96,8 @@ export const useAppStore = defineStore('app', () => {
       // 部分平台不支持主题监听，忽略
     }
     // #endif
+
+    syncNativeTheme(resolvedTheme.value)
   }
 
   return { theme, systemTheme, statusBarHeight, resolvedTheme, setTheme, initTheme }
