@@ -1,0 +1,10 @@
+{
+  "app.name": "Enterprise Template",
+  "common.confirm": "OK",
+  "common.cancel": "Cancel",
+  "index.title": "Home",
+  "mine.title": "Mine",
+  "login.title": "Login",
+  "login.placeholder.title": "Login Placeholder",
+  "login.placeholder.desc": "The request layer redirects here when the session expires. After integrating the real login API, complete sign-in on this page and return to the original page via the redirect parameter."
+}

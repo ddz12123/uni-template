@@ -6,10 +6,9 @@ import AppProvider from '@/components/AppProvider.vue'
   <AppProvider>
     <view class="page">
       <view class="placeholder">
-        <view class="title">登录页占位</view>
+        <view class="title">{{ $t('login.placeholder.title') }}</view>
         <view class="description">
-          请求层检测到登录失效时会跳转到这里。接入真实登录接口后，在此页完成登录，并按 redirect
-          参数回到原页面。
+          {{ $t('login.placeholder.desc') }}
         </view>
       </view>
     </view>

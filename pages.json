@@ -9,19 +9,19 @@
     {
       "path": "pages/index/index",
       "style": {
-        "navigationBarTitleText": "首页"
+        "navigationBarTitleText": "%index.title%"
       }
     },
     {
       "path": "pages/mine/mine",
       "style": {
-        "navigationBarTitleText": "我的"
+        "navigationBarTitleText": "%mine.title%"
       }
     },
     {
       "path": "pages/login/login",
       "style": {
-        "navigationBarTitleText": "登录"
+        "navigationBarTitleText": "%login.title%"
       }
     }
   ],
@@ -38,13 +38,13 @@
     "list": [
       {
         "pagePath": "pages/index/index",
-        "text": "首页",
+        "text": "%index.title%",
         "iconPath": "static/tabbar/home.png",
         "selectedIconPath": "static/tabbar/home-active.png"
       },
       {
         "pagePath": "pages/mine/mine",
-        "text": "我的",
+        "text": "%mine.title%",
         "iconPath": "static/tabbar/user.png",
         "selectedIconPath": "static/tabbar/user-active.png"
       }

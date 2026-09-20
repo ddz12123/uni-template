@@ -1,0 +1,10 @@
+{
+  "app.name": "企业级模板",
+  "common.confirm": "确定",
+  "common.cancel": "取消",
+  "index.title": "首页",
+  "mine.title": "我的",
+  "login.title": "登录",
+  "login.placeholder.title": "登录页占位",
+  "login.placeholder.desc": "请求层检测到登录失效时会跳转到这里。接入真实登录接口后，在此页完成登录，并按 redirect 参数回到原页面。"
+}
