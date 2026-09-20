@@ -1,0 +1,13 @@
+/**
+ * 静态资源公共前缀（SCSS 侧唯一维护点）。
+ *
+ * 本文件的 $cdn 由脚本维护：`npm run sync:cdn` 会读取 .env.production 的
+ * VITE_PUBLIC_PATH 自动写入，请勿手动修改 cdn-start / cdn-end 标记之间的内容。
+ *
+ * 通过 uni.scss 的 `@use ... as *` 注入到每个页面的 scss 编译单元，
+ * 页面样式可直接使用 $cdn 拼接资源路径（如 url($cdn + '/images/xx.png')），无需手动引入。
+ */
+
+/* cdn-start */
+$cdn: '/static';
+/* cdn-end */

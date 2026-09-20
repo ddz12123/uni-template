@@ -4,6 +4,7 @@
   "private": true,
   "description": "企业级开箱即用的 uni-app HBuilderX 模板（Vue3 + TS + Pinia + Wot UI v2）",
   "scripts": {
+    "sync:cdn": "node scripts/sync-cdn.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

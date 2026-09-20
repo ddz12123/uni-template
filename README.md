@@ -18,10 +18,11 @@ HBuilderX 原生工程的 uni-app 空白模板（Vue3 + TS + Pinia + Wot UI v2 +
 components/AppProvider.vue   页面根容器：组件库暗黑模式 + 页面主题变量联动
 config/index.ts              全局常量（应用名/版本号取自 manifest、成功码、超时、刷新接口、登录页）
 pages/                       首页 / 我的（tabbar）+ login（401 登出回跳目标，redirect 回原页）
+scripts/                     sync-cdn.mjs（把 .env.production 的 CDN 前缀同步到 scss）
 store/                       pinia + persistedstate；modules: user（响应式登录态）/ app（主题）
-styles/                      tokens.scss 设计令牌 / index.scss 全局样式
+styles/                      tokens.scss 设计令牌 / cdn.scss 静态资源前缀 / index.scss 全局样式
 types/                       env.d.ts 环境变量类型 / vue-shim.d.ts / uni-app-shim.d.ts
-utils/                       request 请求层 / auth / storage / report（节流上报）/ update（版本更新）/ share（全局分享）/ 工具函数（基于 @vueuse/core）
+utils/                       request 请求层 / auth / storage / static（静态资源 URL）/ report（节流上报）/ update（版本更新）/ share（全局分享）/ 工具函数（基于 @vueuse/core）
 ```
 
 ## 约定
@@ -109,9 +110,38 @@ export default {
 | ------------------- | --------------------------------------------------------------------------- |
 | `VITE_APP_BASE_URL` | 接口地址（「运行」加载 `.env.development`，「发行」加载 `.env.production`） |
 | `VITE_REPORT_URL`   | 日志上报地址，留空只打印                                                    |
+| `VITE_PUBLIC_PATH`  | 静态资源公共前缀：本地 `/static`，生产为 CDN 地址（见下节）                |
 
 代码中 `import.meta.env.VITE_XXX` 访问。
 本地环境文件不要提交到 Git，复制 `.env.example` 后按 HBuilderX 的运行/发行环境命名并填写。
+
+### 静态资源与 CDN
+
+图片 / 视频 / 音频等静态资源统一走公共前缀，唯一数据源是 `.env` 的 `VITE_PUBLIC_PATH`：
+本地开发为 `/static`（项目根 `static/` 目录），生产改为 CDN 地址（如 `https://oss-xxxx/static`）。
+公共层只提供「前缀 + 拼接方法」，具体资源路径由各页面自己传入，不在公共文件里集中枚举。
+
+- **ts / 模板**（运行时）：调用 `utils/static.ts` 的 `resolveStatic(path)`，`path` 为相对 `static/` 的路径：
+
+  ```ts
+  import { resolveStatic } from '@/utils/static'
+
+  resolveStatic('images/login/login-bg.png')
+  resolveStatic('videos/demo.mp4')
+  ```
+
+  模板：`<image :src="resolveStatic('images/login/login-bg.png')" />`（script setup 中需先 import 并可用）。
+
+- **scss**（编译期，如背景图）：`uni.scss` 已全局注入前缀 `$cdn`，页面样式自己拼路径，无需手动引入：
+
+  ```scss
+  .login {
+    background-image: url($cdn + '/images/login/login-bg.png');
+  }
+  ```
+
+- **发行切换 CDN**：改 `.env.production` 的 `VITE_PUBLIC_PATH` → 执行 `npm run sync:cdn`（自动把值写入 `styles/cdn.scss` 的 `$cdn`）→ HBuilderX 发行；并在微信公众平台配置 `downloadFile` 合法域名。
+- **不要用 `import img from '@/static/xx.png'`** 引用业务资源：import 会把资源打进小程序包（主包上限 2M）且切 CDN 后失效；`static/` 目录只保留必须随包的资源（如 tabBar 图标）。
 
 ## 常见问题
 
@@ -147,6 +177,7 @@ import AppProvider from '@/components/AppProvider.vue'
 - 填写微信小程序 `mp-weixin.appid`，并检查目标平台的包名、签名和隐私协议配置。
 - `manifest.json -> mp-weixin` 下的 `darkmode` / `themeLocation` / `lazyCodeLoading` 保持现状（已在位），改 `theme.json` 变量名时同步 `pages.json` 的 `@引用`。
 - 按环境填写接口地址。
+- 静态资源上 CDN：把资源传到 CDN 后修改 `.env.production` 的 `VITE_PUBLIC_PATH`，执行 `npm run sync:cdn`，并配置小程序 `downloadFile` 合法域名。
 - 接入真实登录后，删除登录页占位文案并实现 `redirect` 回跳。
 - 确认是否启用全局分享、错误上报和小程序版本更新；不需要时移除对应初始化调用。
 

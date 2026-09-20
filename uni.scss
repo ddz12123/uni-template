@@ -6,6 +6,9 @@
  * - 运行时可切换的主题变量（CSS Variables）见 styles/tokens.scss。
  */
 
+/* 静态资源 CDN 前缀 $cdn：值由 `npm run sync:cdn` 从 .env.production 同步，勿手改 */
+@use './styles/cdn.scss' as *;
+
 /* 官方颜色变量 */
 $uni-color-primary: #007aff;
 $uni-color-success: #4cd964;
@@ -49,3 +52,14 @@ $app-radius: 16rpx;
 $app-radius-lg: 20rpx;
 $app-gap: 24rpx;
 $app-page-padding: 24rpx;
+
+/* ===================== 静态资源（CDN）===================== */
+
+/**
+ * 只统一维护公共前缀 $cdn（由顶部 @use './styles/cdn.scss' 注入，值来自
+ * .env.production 的 VITE_PUBLIC_PATH，经 `npm run sync:cdn` 同步）。
+ * 具体资源路径由各页面自己拼接，不在此集中枚举，例：
+ *   background-image: url($cdn + '/images/login/login-bg.png');
+ * 本地开发 $cdn 为 '/static'（项目根 static/ 目录），生产为 CDN 地址。
+ * ts / 模板侧的等价方法见 utils/static.ts 的 resolveStatic(path)。
+ */
