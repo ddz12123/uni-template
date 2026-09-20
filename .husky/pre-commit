@@ -1,0 +1,3 @@
+# 提交前仅用 Prettier 格式化暂存文件（不跑 ESLint 校验）
+# 具体匹配规则见 package.json 的 "lint-staged" 字段
+npx lint-staged

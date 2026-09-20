@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import AppProvider from '@/components/AppProvider.vue'
+import { useLocaleNavBar } from '@/locale'
+
+// 小程序端 pages.json 的 %login.title% 不生效，用 useLocaleNavBar 兜底导航栏标题（H5/App 也一致）
+useLocaleNavBar('login.title')
 </script>
 
 <template>

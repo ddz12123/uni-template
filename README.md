@@ -17,11 +17,12 @@ HBuilderX 原生工程的 uni-app 空白模板（Vue3 + TS + Pinia + Wot UI v2 +
 ```
 components/AppProvider.vue   页面根容器：组件库暗黑模式 + 页面主题变量联动
 config/index.ts              全局常量（应用名/版本号取自 manifest、成功码、超时、刷新接口、登录页）
+locale/                      i18n 语言包（zh-Hans/en.json）+ index.ts（vue-i18n 实例、t、setLocale、导航栏/tabBar 兑底）
 pages/                       首页 / 我的（tabbar）+ login（401 登出回跳目标，redirect 回原页）
 scripts/                     sync-cdn.mjs（把 .env.production 的 CDN 前缀同步到 scss）
 store/                       pinia + persistedstate；modules: user（响应式登录态）/ app（主题）
 styles/                      tokens.scss 设计令牌 / cdn.scss 静态资源前缀 / index.scss 全局样式
-types/                       env.d.ts 环境变量类型 / vue-shim.d.ts / uni-app-shim.d.ts
+types/                       env.d.ts 环境变量类型 / vue-i18n.d.ts（$t 增强）/ builtin-modules.d.ts / vue-shim.d.ts / uni-app-shim.d.ts
 utils/                       request 请求层 / auth / storage / static（静态资源 URL）/ report（节流上报）/ update（版本更新）/ share（全局分享）/ 工具函数（基于 @vueuse/core）
 ```
 
@@ -110,7 +111,7 @@ export default {
 | ------------------- | --------------------------------------------------------------------------- |
 | `VITE_APP_BASE_URL` | 接口地址（「运行」加载 `.env.development`，「发行」加载 `.env.production`） |
 | `VITE_REPORT_URL`   | 日志上报地址，留空只打印                                                    |
-| `VITE_PUBLIC_PATH`  | 静态资源公共前缀：本地 `/static`，生产为 CDN 地址（见下节）                |
+| `VITE_PUBLIC_PATH`  | 静态资源公共前缀：本地 `/static`，生产为 CDN 地址（见下节）                 |
 
 代码中 `import.meta.env.VITE_XXX` 访问。
 本地环境文件不要提交到 Git，复制 `.env.example` 后按 HBuilderX 的运行/发行环境命名并填写。
@@ -142,6 +143,22 @@ export default {
 
 - **发行切换 CDN**：改 `.env.production` 的 `VITE_PUBLIC_PATH` → 执行 `npm run sync:cdn`（自动把值写入 `styles/cdn.scss` 的 `$cdn`）→ HBuilderX 发行；并在微信公众平台配置 `downloadFile` 合法域名。
 - **不要用 `import img from '@/static/xx.png'`** 引用业务资源：import 会把资源打进小程序包（主包上限 2M）且切 CDN 后失效；`static/` 目录只保留必须随包的资源（如 tabBar 图标）。
+
+### 国际化（i18n）
+
+基于 uni-app Vue3 内置的 `vue-i18n`（9.1.9，不走 npm），默认简中 + 英文，语言包在 `locale/*.json`。
+
+- **一份语言包两用**：`locale/zh-Hans.json`、`locale/en.json` 用扁平点号 key（如 `index.title`），
+  既是 vue-i18n 的 messages（`locale/index.ts` 里 `flatJson: true` 解析），又供 `pages.json` 的
+  `%index.title%` 占位（原生导航栏标题 / tabBar 文字）。
+- **页面用法**：模板 `{{ $t('index.title') }}`；`<script setup>` 内 `const { t } = useI18n()`；
+  setup 之外（拦截器、工具函数）用 `import { t } from '@/locale'`。
+- **切换语言**：`import { setLocale } from '@/locale'` 调 `setLocale('en')`，内部同时更新 vue-i18n、
+  `uni.setLocale` 持久化（下次启动 `uni.getLocale` 生效）、刷新小程序 tabBar。
+- **小程序端兑底**：`%key%` 在小程序不生效——tabBar 由 `App.onLaunch` 的 `syncNativeLocale()` 处理，
+  导航栏标题在页面 setup 调 `useLocaleNavBar('xxx.title')`（见 `login.vue` 示范）。
+- **新增语言**：加 `locale/<lang>.json`，在 `locale/index.ts` 的 `AppLocale` 联合类型、`messages`、`LOCALE_OPTIONS` 各补一处。
+- 内置 `vue-i18n` 无 npm 类型，`$t` 的模板类型由 `types/vue-i18n.d.ts` 增强补回；vue 本身有真实类型，切勿在 `builtin-modules.d.ts` 里 `declare module 'vue'`（会覆盖）。
 
 ## 常见问题
 

@@ -9,7 +9,8 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky"
   },
   "dependencies": {
     "@vueuse/core": "^14.4.0",
@@ -20,7 +21,12 @@
     "@antfu/eslint-config": "^9.5.1",
     "@dcloudio/types": "^3.4.12",
     "eslint": "^9.20.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.5.1",
     "prettier": "^3.4.2",
     "typescript": "~5.4.5"
+  },
+  "lint-staged": {
+    "*": "prettier --write --ignore-unknown"
   }
 }
