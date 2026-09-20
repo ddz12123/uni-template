@@ -9,9 +9,7 @@ declare module '@dcloudio/uni-app' {
   export function onHide(fn: () => void): void
   export function onError(fn: (error: string) => void): void
   export function onPageNotFound(fn: (options?: Record<string, any>) => void): void
-  export function onUnhandledRejection(
-    fn: (options?: Record<string, any>) => void,
-  ): void
+  export function onUnhandledRejection(fn: (options?: Record<string, any>) => void): void
   export function onThemeChange(fn: (options?: Record<string, any>) => void): void
   // ---- 页面级（页面 setup 顶层调用） ----
   export function onLoad(fn: (query?: Record<string, string>) => void): void

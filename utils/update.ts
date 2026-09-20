@@ -33,8 +33,7 @@ export function checkMiniProgramUpdate(): void {
       reportLog({ type: 'error', message: `UpdateFailed: ${JSON.stringify(err)}` })
       uni.showToast({ title: '新版本下载失败，请稍后重试', icon: 'none' })
     })
-  }
-  catch {
+  } catch {
     // 低版本基础库可能不支持，忽略
   }
   // #endif

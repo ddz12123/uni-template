@@ -31,8 +31,7 @@ export function getCache<T>(key: string): T | null {
       return null
     }
     return wrapper.v
-  }
-  catch {
+  } catch {
     return null
   }
 }
@@ -52,7 +51,7 @@ export function clearCache(keepKeys: string[] = ['token', 'refresh-token']) {
     if (!key.startsWith(PREFIX)) {
       return
     }
-    if (keepKeys.some(k => key === PREFIX + k)) {
+    if (keepKeys.some((k) => key === PREFIX + k)) {
       return
     }
     uni.removeStorageSync(key)

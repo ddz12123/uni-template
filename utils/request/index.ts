@@ -5,7 +5,13 @@
  * - 401 单飞无感刷新 + 原请求重放（免登录接口不进刷新流程，避免登录报错被误判成过期）；
  *   刷新失败清空登录态，提示后回到登录页
  */
-import { LOGIN_PATH, REFRESH_TOKEN_URL, REQUEST_TIMEOUT, SUCCESS_CODE, UNAUTHORIZED_CODE } from '@/config'
+import {
+  LOGIN_PATH,
+  REFRESH_TOKEN_URL,
+  REQUEST_TIMEOUT,
+  SUCCESS_CODE,
+  UNAUTHORIZED_CODE,
+} from '@/config'
 import { clearTokens, getRefreshToken, getToken, saveTokens } from '@/utils/auth'
 
 /** 登录态全局事件：请求层与 user store 之间用事件解耦，避免循环依赖 */
@@ -88,6 +94,11 @@ function showLoading() {
   loadingCount += 1
   uni.showLoading({ title: '加载中...', mask: true })
 }
+/**
+ * loading 计数：并发请求只在全部结束后关一次。
+ * 注意 `uni.hideLoading()` 是全局的，会把业务自己 `uni.showLoading()` 的 loading 一起关掉，
+ * 业务自管 loading 时不要再给请求加 `loading: true`。
+ */
 function hideLoading() {
   loadingCount = Math.max(0, loadingCount - 1)
   if (loadingCount === 0) {
@@ -119,7 +130,12 @@ function rawRequest(options: {
       timeout: options.timeout ?? REQUEST_TIMEOUT,
       success: resolve as any,
       fail: (err) => {
-        reject(new ApiError(-1, err?.errMsg?.includes('timeout') ? '请求超时，请稍后重试' : '网络异常，请检查网络'))
+        reject(
+          new ApiError(
+            -1,
+            err?.errMsg?.includes('timeout') ? '请求超时，请稍后重试' : '网络异常，请检查网络',
+          ),
+        )
       },
     })
   })
@@ -141,7 +157,7 @@ function refreshTokenOnce(): Promise<void> {
       method: 'POST',
       data: { refreshToken },
     })
-    const body = res.data as ApiResponse<{ token: string, refreshToken: string }>
+    const body = res.data as ApiResponse<{ token: string; refreshToken: string }>
     if (res.statusCode >= 400 || !body || body.code !== SUCCESS_CODE) {
       throw new ApiError(UNAUTHORIZED_CODE, '刷新登录态失败')
     }
@@ -149,7 +165,10 @@ function refreshTokenOnce(): Promise<void> {
     // 刷新成功说明登录态有效：取消可能挂起的登出跳转（极端并发时序下用）
     clearPendingLogout()
     // 通知 user store 同步新 token（store 监听 AUTH_EVENTS.refreshed）
-    uni.$emit(AUTH_EVENTS.refreshed, { token: body.data.token, refreshToken: body.data.refreshToken })
+    uni.$emit(AUTH_EVENTS.refreshed, {
+      token: body.data.token,
+      refreshToken: body.data.refreshToken,
+    })
   })().finally(() => {
     refreshPromise = null
   })
@@ -190,16 +209,14 @@ function forceLogout(): void {
     if (current) {
       target = `${LOGIN_PATH}?redirect=${encodeURIComponent(`/${current}`)}`
     }
-  }
-  catch {
+  } catch {
     // 取页面栈失败仍按默认目标跳
   }
   logoutTimer = setTimeout(() => {
     logoutTimer = undefined
     try {
       uni.reLaunch({ url: target })
-    }
-    catch {
+    } catch {
       // 忽略（如单元测试环境无路由）
     }
   }, LOGOUT_REDIRECT_DELAY_MS)
@@ -238,7 +255,8 @@ async function request<T = any>(config: RequestOptions): Promise<T> {
       const body = res.data as ApiResponse | undefined
       throw new ApiError(
         res.statusCode,
-        (body && typeof body === 'object' && 'msg' in body && body.msg) || `请求失败（${res.statusCode}）`,
+        (body && typeof body === 'object' && 'msg' in body && body.msg) ||
+          `请求失败（${res.statusCode}）`,
       )
     }
 
@@ -251,17 +269,17 @@ async function request<T = any>(config: RequestOptions): Promise<T> {
       throw new ApiError(body.code, body.msg || '请求失败')
     }
     return res.data as T
-  }
-  catch (error) {
+  } catch (error) {
     // 401 且未重试过、且不是免登录接口：刷新 token 后重放一次原请求
     const isUnauthorized = error instanceof ApiError && error.code === UNAUTHORIZED_CODE
     if (isUnauthorized && !isAuthFree && !custom.__retried) {
       try {
         await refreshTokenOnce()
-      }
-      catch {
-        // 先提示再跳（forceLogout 内延迟跳转，保证 toast 可见）
-        uni.showToast({ title: '登录已过期，请重新登录', icon: 'none' })
+      } catch {
+        // 先提示再跳（forceLogout 内延迟跳转，保证 toast 可见）；silent 只省掉提示，仍会跳登录页
+        if (!custom.silent) {
+          uni.showToast({ title: '登录已过期，请重新登录', icon: 'none' })
+        }
         forceLogout()
         throw new ApiError(UNAUTHORIZED_CODE, '登录已过期，请重新登录')
       }
@@ -273,8 +291,7 @@ async function request<T = any>(config: RequestOptions): Promise<T> {
       uni.showToast({ title: error.message, icon: 'none' })
     }
     throw error
-  }
-  finally {
+  } finally {
     if (custom.loading) {
       hideLoading()
     }

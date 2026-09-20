@@ -21,13 +21,14 @@ function getCurrentPage(): string {
   try {
     const pages = getCurrentPages()
     return (pages[pages.length - 1] as any)?.route ?? ''
-  }
-  catch {
+  } catch {
     return ''
   }
 }
 
-export function reportLog(payload: Omit<ReportPayload, 'time' | 'version' | 'page'> & { page?: string }) {
+export function reportLog(
+  payload: Omit<ReportPayload, 'time' | 'version' | 'page'> & { page?: string },
+) {
   const entry: ReportPayload = {
     page: getCurrentPage(),
     time: new Date().toISOString(),
@@ -82,8 +83,7 @@ function enqueueReport(entry: ReportPayload) {
   const hit = pendingReports.get(key)
   if (hit) {
     hit.count += 1
-  }
-  else {
+  } else {
     if (pendingReports.size >= MAX_QUEUE) {
       const oldest = pendingReports.keys().next()
       if (!oldest.done) {
@@ -138,18 +138,16 @@ export function initErrorReport() {
     uni.onError?.((message: string) => {
       reportLog({ type: 'error', message: `uni.onError: ${message}` })
     })
-  }
-  catch {
+  } catch {
     // 部分平台不支持，忽略
   }
   try {
     uni.onUnhandledRejection?.(((res: { reason?: unknown }) => {
       const reason = res?.reason
-      const message = reason instanceof Error ? (reason.stack || reason.message) : String(reason)
+      const message = reason instanceof Error ? reason.stack || reason.message : String(reason)
       reportLog({ type: 'error', message: `UnhandledRejection: ${message}` })
     }) as any)
-  }
-  catch {
+  } catch {
     // 部分平台不支持，忽略
   }
 }

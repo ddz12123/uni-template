@@ -5,7 +5,8 @@
     "bgColor": "#f5f6f9",
     "tabBgColor": "#ffffff",
     "tabColor": "#9ca3af",
-    "tabSelectedColor": "#4d80f0"
+    "tabSelectedColor": "#4d80f0",
+    "tabBorderStyle": "black"
   },
   "dark": {
     "navBgColor": "#1a1b1e",
@@ -13,6 +14,7 @@
     "bgColor": "#111214",
     "tabBgColor": "#1d1e22",
     "tabColor": "#7a7a7a",
-    "tabSelectedColor": "#7da3ff"
+    "tabSelectedColor": "#7da3ff",
+    "tabBorderStyle": "white"
   }
 }

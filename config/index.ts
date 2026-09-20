@@ -2,7 +2,7 @@
 
 import manifest from '@/manifest.json'
 
-const manifestMeta = manifest as { name?: string, versionName?: string }
+const manifestMeta = manifest as { name?: string; versionName?: string }
 
 /** 应用名称唯一来源：manifest.json 的 name */
 export const APP_NAME = manifestMeta.name ?? 'uni-app'

@@ -10,15 +10,16 @@ import { useDateFormat, useDebounceFn, useThrottleFn } from '@vueuse/core'
  * 注意：iOS 的 JavaScriptCore 不支持 'YYYY-MM-DD HH:mm:ss' 直接解析，
  * 先归一化再交给 useDateFormat；非法输入返回 ''。
  */
-export function formatDate(input: string | number | Date = Date.now(), template = 'YYYY-MM-DD HH:mm:ss'): string {
+export function formatDate(
+  input: string | number | Date = Date.now(),
+  template = 'YYYY-MM-DD HH:mm:ss',
+): string {
   let date: Date
   if (input instanceof Date) {
     date = input
-  }
-  else if (typeof input === 'number') {
+  } else if (typeof input === 'number') {
     date = new Date(input)
-  }
-  else {
+  } else {
     date = new Date(input.includes('T') ? input : input.replace(/-/g, '/'))
   }
   if (Number.isNaN(date.getTime())) {

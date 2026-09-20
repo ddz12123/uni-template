@@ -55,7 +55,8 @@ token 自动注入（`/auth/login` 与刷新接口免带）；401 自动单飞�
 ### 全局分享（utils/share.ts）
 
 `main.ts` 里 `app.mixin(shareMixin)` 一次接入，所有页面默认可发送给朋友 / 分享到朋友圈，
-无需逐页处理。某页要定制，用 options 写法覆盖即可：
+无需逐页处理。分享菜单在 mixin 的 `onShow` 里逐页开启（微信侧 `menus` 是页面级开关，
+放到 `App.onLaunch` 只调一次时页面栈为空，朋友圈入口不会出现）。某页要定制，用 options 写法覆盖即可：
 
 ```vue
 <script>
@@ -82,8 +83,21 @@ export default {
 
 - `uni.scss`：编译期变量（`$app-*`），保留官方 `$uni-*` 兼容市场插件
 - `styles/tokens.scss`：运行时变量（`--app-*`），暗黑经媒体查询 + `.app-theme-dark` 覆盖层
-- `theme.json`：原生导航栏 / tabBar 深色（跟随系统）
+- `theme.json`：原生导航栏 / tabBar 深浅色，`pages.json` 里用 `@变量名` 引用；
+  **`darkmode` 与 `themeLocation` 配在 `manifest.json -> mp-weixin` 下**（官方 DarkMode 指南要求写在
+  manifest 的平台节点；写在 `pages.json` 时 `darkmode` 不会进编译产物 `app.json`，缺它微信就不做变量替换，
+  `@navBgColor` 会被当成非法颜色值）。改完重新编译，以 `unpackage/dist/.../app.json` 里能看到
+  `"darkmode": true` 为准
 - 组件库暗黑由 `AppProvider` 的 `wd-config-provider` 联动；调用 `useAppStore().setTheme()` 时会同步原生导航栏和 tabBar
+
+### 小程序启动优化
+
+- `manifest.json -> mp-weixin -> lazyCodeLoading: "requiredComponents"`：开启按需注入（官方 manifest
+  文档明确支持该字段，目前仅此取值），只注入当前页面用到的代码，降低启动耗时与内存。
+  注意微信侧说明全局 `usingComponents` 声明的组件会被强制拉进依赖池，本模板 `pages.json` 里的
+  `^wd-` easycom 全局规则会削弱收益；是否真有提升要自己对比开关前后的真机启动耗时，
+  配置不当还可能被审核提示「启动组件按需注入未通过」
+- tabBar 用原生配置（`pages.json -> tabBar`），启动时无需等 JS 初始化即可渲染
 
 ### 应用名称
 
@@ -91,25 +105,23 @@ export default {
 
 ### 环境变量
 
-| 变量 | 说明 |
-| --- | --- |
+| 变量                | 说明                                                                        |
+| ------------------- | --------------------------------------------------------------------------- |
 | `VITE_APP_BASE_URL` | 接口地址（「运行」加载 `.env.development`，「发行」加载 `.env.production`） |
-| `VITE_REPORT_URL` | 日志上报地址，留空只打印 |
+| `VITE_REPORT_URL`   | 日志上报地址，留空只打印                                                    |
 
 代码中 `import.meta.env.VITE_XXX` 访问。
 本地环境文件不要提交到 Git，复制 `.env.example` 后按 HBuilderX 的运行/发行环境命名并填写。
-
-### H5 跨域联调（vite 反向代理）
-
-根目录 `vite.config.js` 已配好 `/api` → 测试域名的代理（仅 H5「运行」时生效，小程序无跨域概念不受影响）。
-H5 联调时把 `.env.development` 的 `VITE_APP_BASE_URL` 改为 `'/api'` 即可；
-后端接口本身带 `/api` 前缀的话，把 `vite.config.js` 里那行 `rewrite` 删掉。
 
 ## 常见问题
 
 - easycom 规则（`pages.json`）修改后需重启 HBuilderX 运行
 - 页面使用 Wot UI 反馈类 hooks 时，需要在当前页面显式挂载对应的 `wd-toast` / `wd-dialog` 实例
-- 工程化命令（可选，不影响 HBuilderX 运行）：`npm run lint` / `npm run format` / `npm run typecheck`
+- 工程化命令（可选，不影响 HBuilderX 运行；ESLint 管代码质量，Prettier 管格式，两者已解耦不会互相覆盖）：
+  - `npm run lint` 质量检查，`npm run lint:fix` 自动修
+  - `npm run format` Prettier 排版，`npm run format:check` 只校验不改动（可用于 CI）
+  - `npm run typecheck` TS 类型检查（vue / pinia 等 HBuilderX 内置依赖不装 npm 包，
+    由 `types/builtin-modules.d.ts` 声明放行，故 store 成员的推导精度有限）
 
 ## 新页面约定
 
@@ -133,7 +145,8 @@ import AppProvider from '@/components/AppProvider.vue'
 
 - 修改 `manifest.json.name`，它是应用名称唯一来源。
 - 填写微信小程序 `mp-weixin.appid`，并检查目标平台的包名、签名和隐私协议配置。
-- 按环境填写接口地址；开发代理只用于 H5 联调。
+- `manifest.json -> mp-weixin` 下的 `darkmode` / `themeLocation` / `lazyCodeLoading` 保持现状（已在位），改 `theme.json` 变量名时同步 `pages.json` 的 `@引用`。
+- 按环境填写接口地址。
 - 接入真实登录后，删除登录页占位文案并实现 `redirect` 回跳。
 - 确认是否启用全局分享、错误上报和小程序版本更新；不需要时移除对应初始化调用。
 

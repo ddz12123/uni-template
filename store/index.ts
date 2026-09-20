@@ -12,7 +12,7 @@ pinia.use(
   createPersistedState({
     storage: {
       // 小程序端没有 localStorage，统一适配为 uni storage
-      getItem: key => (uni.getStorageSync(key) as string) || null,
+      getItem: (key) => (uni.getStorageSync(key) as string) || null,
       setItem: (key, value) => uni.setStorageSync(key, value),
     },
   }),
