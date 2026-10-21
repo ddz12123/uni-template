@@ -5,24 +5,39 @@ HBuilderX 原生工程的 uni-app 空白模板（Vue3 + TS + Pinia + Wot UI v2 +
 
 ## 快速开始
 
-1. HBuilderX 打开项目根目录。
+0. 先在项目根目录执行 `npm install`。Wot UI、VueUse、持久化插件和 `vue-tsc` 都是 npm 依赖，`node_modules` 不在仓库里；HBuilderX 可能会提示安装，但手动执行一次最稳妥。
+1. HBuilderX 打开项目根目录（建议 HBuilderX 5.26 及以上）。
 2. 首次运行按 HBuilderX 提示启用 SCSS/Sass 编译支持。
 3. 微信小程序在 `manifest.json` 填写 `mp-weixin.appid`。
-4. 根据目标平台填写开发/生产环境的接口地址，并完成平台发布配置。
+4. 根据目标平台填写开发/生产环境的接口地址；切换 CDN 环境时执行 `npm run sync:cdn:dev` / `npm run sync:cdn:prod`（见「静态资源与 CDN」）。
 
-本项目以 HBuilderX 为运行和发行入口，不提供 CLI dev/build 流程。仓库中的 npm 命令仅用于可选的代码检查，不影响 HBuilderX 运行。
+本项目的 Vue3 运行基线是 HBuilderX 5.26 内置的 Vue 3.4.21 / Pinia 2.1.7 / vue-i18n 9.1.9。`npm run lint`、`format`、`typecheck` 是可选检查，但依赖必须先安装；项目不走 CLI 编译，运行和发行仍由 HBuilderX 完成。
+
+## 依赖版本基线
+
+HBuilderX 5.26 的 `uniapp-cli-vite` 编译器内置 Vue 3.4.21、Pinia 2.1.7、vue-i18n 9.1.9。npm 侧只安装与这个基线兼容的版本：
+
+| 包                            | 版本                      | 原因                                                  |
+| ----------------------------- | ------------------------- | ----------------------------------------------------- |
+| `vue`                         | `3.4.21`（devDependency） | 仅用于 vue-tsc / 编辑器类型；运行时由 HBuilderX 内置  |
+| `@vueuse/core`                | `11.3.0`                  | 12.0.0 起要求 Vue `^3.5.13`，与内置 3.4.21 不兼容     |
+| `pinia-plugin-persistedstate` | `4.1.0`                   | 4.2 要求 Pinia >=2.3，4.3+ 要求 Pinia 3；内置是 2.1.7 |
+| `vue-tsc`                     | `2.2.12`                  | 与 TS 5.4 / Vue 3.4 兼容，用于检查 `.vue`             |
+
+升级 HBuilderX 后先确认它的内置 Vue/Pinia 版本，再同步调整这里；不要单独把 `@vueuse/core` 升到 12+、把持久化插件升到 4.2+。
 
 ## 目录结构
 
 ```
 components/AppProvider.vue   页面根容器：组件库暗黑模式 + 页面主题变量联动
 config/index.ts              全局常量（应用名/版本号取自 manifest、成功码、超时、刷新接口、登录页）
-locale/                      i18n 语言包（zh-Hans/en.json）+ index.ts（vue-i18n 实例、t、setLocale、导航栏/tabBar 兑底）
+locale/                      i18n 语言包（zh-Hans/en.json）+ index.ts（vue-i18n 实例、t、setLocale、导航栏/tabBar 兜底）
 pages/                       首页 / 我的（tabbar）+ login（401 登出回跳目标，redirect 回原页）
-scripts/                     sync-cdn.mjs（把 .env.production 的 CDN 前缀同步到 scss）
+scripts/                     sync-cdn.mjs（按 .env.<mode> 把 CDN 前缀同步到 uni.scss）
 store/                       pinia + persistedstate；modules: user（响应式登录态）/ app（主题）
-styles/                      tokens.scss 设计令牌 / cdn.scss 静态资源前缀 / index.scss 全局样式
-types/                       env.d.ts 环境变量类型 / vue-i18n.d.ts（$t 增强）/ builtin-modules.d.ts / vue-shim.d.ts / uni-app-shim.d.ts
+styles/                      tokens.scss 设计令牌 / index.scss 全局样式
+types/                       env.d.ts 环境变量类型 / vue-i18n.d.ts（$t 增强）/ builtin-modules.d.ts / assets.d.ts / uni-app-shim.d.ts
+uni.scss                     官方 $uni-* 变量 + $cdn（由 sync:cdn:dev / sync:cdn:prod 维护）
 utils/                       request 请求层 / auth / storage / static（静态资源 URL）/ report（节流上报）/ update（版本更新）/ share（全局分享）/ 工具函数（基于 @vueuse/core）
 ```
 
@@ -115,10 +130,11 @@ export default {
 
 代码中 `import.meta.env.VITE_XXX` 访问。
 本地环境文件不要提交到 Git，复制 `.env.example` 后按 HBuilderX 的运行/发行环境命名并填写。
+模板不内置 `vite.config.js`；H5 需要反向代理时请自行添加，不配置不影响 HBuilderX 运行和发行。
 
 ### 静态资源与 CDN
 
-图片 / 视频 / 音频等静态资源统一走公共前缀，唯一数据源是 `.env` 的 `VITE_PUBLIC_PATH`：
+图片 / 视频 / 音频等静态资源统一走公共前缀，唯一数据源是 `.env.<mode>` 的 `VITE_PUBLIC_PATH`：
 本地开发为 `/static`（项目根 `static/` 目录），生产改为 CDN 地址（如 `https://oss-xxxx/static`）。
 公共层只提供「前缀 + 拼接方法」，具体资源路径由各页面自己传入，不在公共文件里集中枚举。
 
@@ -133,7 +149,7 @@ export default {
 
   模板：`<image :src="resolveStatic('images/login/login-bg.png')" />`（script setup 中需先 import 并可用）。
 
-- **scss**（编译期，如背景图）：`uni.scss` 已全局注入前缀 `$cdn`，页面样式自己拼路径，无需手动引入：
+- **scss**（编译期，如背景图）：`$cdn` 直接定义在 `uni.scss` 顶部，页面样式自己拼路径：
 
   ```scss
   .login {
@@ -141,7 +157,12 @@ export default {
   }
   ```
 
-- **发行切换 CDN**：改 `.env.production` 的 `VITE_PUBLIC_PATH` → 执行 `npm run sync:cdn`（自动把值写入 `styles/cdn.scss` 的 `$cdn`）→ HBuilderX 发行；并在微信公众平台配置 `downloadFile` 合法域名。
+  注意：HBuilderX 会把 `uni.scss` 原样注入每个页面的 SCSS 编译单元，所以不要在 `uni.scss` 里用相对路径 `@use` 其他 scss 文件（路径会按页面目录解析，页面样式会编译失败）。
+
+- **切换环境**：`npm run sync:cdn:dev` 读取 `.env.development`，`npm run sync:cdn:prod` 读取 `.env.production`，也可以 `npm run sync:cdn -- staging` 读取 `.env.staging`。
+  脚本按 `.env.<mode>.local > .env.<mode> > .env.local > .env` 的顺序找 `VITE_PUBLIC_PATH`，最后回退 `.env.example`，把值写入 `uni.scss` 的 `cdn-start` / `cdn-end` 标记之间。
+  切换开发/发行环境后需要重新执行对应命令；仓库默认保留开发值 `/static`。
+- **发行切换 CDN**：改 `.env.production` 的 `VITE_PUBLIC_PATH` → 执行 `npm run sync:cdn:prod` → HBuilderX 发行；并在微信公众平台配置 `downloadFile` 合法域名。
 - **不要用 `import img from '@/static/xx.png'`** 引用业务资源：import 会把资源打进小程序包（主包上限 2M）且切 CDN 后失效；`static/` 目录只保留必须随包的资源（如 tabBar 图标）。
 
 ### 国际化（i18n）
@@ -155,8 +176,11 @@ export default {
   setup 之外（拦截器、工具函数）用 `import { t } from '@/locale'`。
 - **切换语言**：`import { setLocale } from '@/locale'` 调 `setLocale('en')`，内部同时更新 vue-i18n、
   `uni.setLocale` 持久化（下次启动 `uni.getLocale` 生效）、刷新小程序 tabBar。
-- **小程序端兑底**：`%key%` 在小程序不生效——tabBar 由 `App.onLaunch` 的 `syncNativeLocale()` 处理，
-  导航栏标题在页面 setup 调 `useLocaleNavBar('xxx.title')`（见 `login.vue` 示范）。
+- **小程序端兜底**：`%key%` 会在编译期按 `manifest.json` 的 `fallbackLocale` 替换（当前 `zh-Hans`），
+  但不会在运行时跟随语言切换。tabBar 由 `App.onLaunch` / `App.onShow` 的 `syncNativeLocale()` 刷新，
+  导航栏标题在页面 setup 调 `useLocaleNavBar('xxx.title')`（`index` / `mine` / `login` 已接入）。
+- **fallbackLocale 必须配置**：HBuilderX 编译小程序 `pages.json` 时读的是 `fallbackLocale`（缺省 `en`），
+  只写 `locale` 会让原生标题 / tabBar 默认编译成英文。
 - **新增语言**：加 `locale/<lang>.json`，在 `locale/index.ts` 的 `AppLocale` 联合类型、`messages`、`LOCALE_OPTIONS` 各补一处。
 - 内置 `vue-i18n` 无 npm 类型，`$t` 的模板类型由 `types/vue-i18n.d.ts` 增强补回；vue 本身有真实类型，切勿在 `builtin-modules.d.ts` 里 `declare module 'vue'`（会覆盖）。
 
@@ -164,11 +188,14 @@ export default {
 
 - easycom 规则（`pages.json`）修改后需重启 HBuilderX 运行
 - 页面使用 Wot UI 反馈类 hooks 时，需要在当前页面显式挂载对应的 `wd-toast` / `wd-dialog` 实例
+- `$cdn` 只能通过 `npm run sync:cdn:dev` / `npm run sync:cdn:prod` 修改；不要在 `uni.scss` 里用相对路径 `@use` 其他 scss 文件
+- `@vueuse/core` / `pinia-plugin-persistedstate` 的版本是按 HBuilderX 5.26 内置运行时锁定的，升级 HBuilderX 前先确认内置 Vue/Pinia 版本
 - 工程化命令（可选，不影响 HBuilderX 运行；ESLint 管代码质量，Prettier 管格式，两者已解耦不会互相覆盖）：
   - `npm run lint` 质量检查，`npm run lint:fix` 自动修
   - `npm run format` Prettier 排版，`npm run format:check` 只校验不改动（可用于 CI）
-  - `npm run typecheck` TS 类型检查（vue / pinia 等 HBuilderX 内置依赖不装 npm 包，
-    由 `types/builtin-modules.d.ts` 声明放行，故 store 成员的推导精度有限）
+  - `npm run typecheck` 使用 `vue-tsc --noEmit`，会同时检查 `.ts` 和 `.vue` 的 script/template；
+    `pinia` / `vue-i18n` 仍由 `types/builtin-modules.d.ts` 声明为 any，故 store / i18n API 的推导精度有限
+  - `npm run sync:cdn:dev` / `npm run sync:cdn:prod` 按环境同步 `$cdn`（见「静态资源与 CDN」）
 
 ## 新页面约定
 
@@ -177,6 +204,10 @@ export default {
 ```vue
 <script setup lang="ts">
 import AppProvider from '@/components/AppProvider.vue'
+import { useLocaleNavBar } from '@/locale'
+
+// 换成当前页的标题 key；小程序端运行时切换语言时靠它刷新原生导航栏
+useLocaleNavBar('index.title')
 </script>
 
 <template>
@@ -193,14 +224,16 @@ import AppProvider from '@/components/AppProvider.vue'
 - 修改 `manifest.json.name`，它是应用名称唯一来源。
 - 填写微信小程序 `mp-weixin.appid`，并检查目标平台的包名、签名和隐私协议配置。
 - `manifest.json -> mp-weixin` 下的 `darkmode` / `themeLocation` / `lazyCodeLoading` 保持现状（已在位），改 `theme.json` 变量名时同步 `pages.json` 的 `@引用`。
-- 按环境填写接口地址。
-- 静态资源上 CDN：把资源传到 CDN 后修改 `.env.production` 的 `VITE_PUBLIC_PATH`，执行 `npm run sync:cdn`，并配置小程序 `downloadFile` 合法域名。
+- 确认 `manifest.json` 的 `locale` / `fallbackLocale` 与默认语言一致（小程序原生标题默认值由 `fallbackLocale` 决定）。
+- 按环境填写接口地址；开发/发行切换时执行 `npm run sync:cdn:dev` / `npm run sync:cdn:prod`。
+- 静态资源上 CDN：把资源传到 CDN 后修改 `.env.production` 的 `VITE_PUBLIC_PATH`，执行 `npm run sync:cdn:prod`，并配置小程序 `downloadFile` 合法域名。
 - 接入真实登录后，删除登录页占位文案并实现 `redirect` 回跳。
 - 确认是否启用全局分享、错误上报和小程序版本更新；不需要时移除对应初始化调用。
 
 ## 发布前检查
 
 - H5、微信小程序和 App 均能正常启动。
+- 页面 SCSS 能正常编译（`$cdn` 已在 `uni.scss` 中同步为当前环境的值）。
 - 浅色、深色和手动主题下，页面、Wot UI、导航栏、TabBar 颜色一致。
 - 登录失效能跳转登录页，登录成功能回到 `redirect` 指向的页面。
 - 生产环境开启平台域名校验，并核对接口域名和隐私配置。

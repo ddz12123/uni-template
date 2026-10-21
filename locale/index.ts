@@ -8,7 +8,8 @@
  * 1. vue 页面 / js —— 经本文件的 i18n 实例（模板 $t、setup 内 useI18n、任意处 t）；
  *    靠 flatJson:true 让 vue-i18n 正确解析扁平 key。
  * 2. pages.json 的原生导航栏标题 / tabBar 文字 —— 用 %index.title% 占位读同一批 json。
- *    H5 / App 由框架自动生效；小程序端不支持 %key%，由 syncNativeLocale 用 API 兜底。
+ *    小程序端会在编译期按 manifest 的 fallbackLocale 替换；运行时切换语言时，
+ *    再由 syncNativeLocale / useLocaleNavBar 通过 API 兜底。
  */
 import { onShow } from '@dcloudio/uni-app'
 import { computed, watch } from 'vue'
@@ -20,14 +21,14 @@ import zhHans from './zh-Hans.json'
 export type AppLocale = 'en' | 'zh-Hans'
 
 /** 语言切换选项：label 用各语言「自称」，不随当前语言翻译 */
-export const LOCALE_OPTIONS: { label: string, value: AppLocale }[] = [
+export const LOCALE_OPTIONS: { label: string; value: AppLocale }[] = [
   { label: '简体中文', value: 'zh-Hans' },
   { label: 'English', value: 'en' },
 ]
 
 /**
  * pages.json tabBar.list 各项文字对应的 i18n key，顺序须与 pages.json 完全一致。
- * 小程序端 %key% 不生效，切语言时用 uni.setTabBarItem 按此表兜底刷新。
+ * 小程序端 %key% 在编译期替换，运行时切语言时用 uni.setTabBarItem 按此表兜底刷新。
  */
 const TAB_BAR_KEYS = ['index.title', 'mine.title']
 
@@ -56,12 +57,12 @@ export const currentLocale = computed<AppLocale>(() => i18n.global.locale.value)
 /**
  * 小程序端原生 tabBar 兜底：按当前语言刷新每个 tab 文字。
  * H5 / App 由框架处理 %key%，本函数已被条件编译隔离，非小程序端调用无副作用。
- * App 启动（onLaunch）与每次 setLocale 后各调用一次。
+ * App 启动（onLaunch）、回前台（onShow）与每次 setLocale 后各调用一次。
  */
 export function syncNativeLocale() {
   // #ifdef MP
   TAB_BAR_KEYS.forEach((key, index) => {
-    // fail 静默：onLaunch 早期 tabBar 可能尚未就绪，此时失败无需报错，首次进入 tab 页会再次同步
+    // fail 静默：onLaunch 早期 tabBar 可能尚未就绪，此时失败无需报错，App.onShow 会再次同步
     uni.setTabBarItem({ index, text: t(key), fail: () => {} })
   })
   // #endif
@@ -81,7 +82,7 @@ export function setLocale(locale: AppLocale) {
 
 /**
  * 页面级导航栏标题国际化：在页面 setup 内调用。
- * H5 / App 端 pages.json 的 %key% 已自动生效，本函数主要补齐小程序端：
+ * H5 / App 端 pages.json 的 %key% 由框架处理，本函数主要补齐小程序端运行时切换：
  * onShow 时按当前语言设置标题，语言切换时也同步刷新（全端调用结果一致，无副作用）。
  * @param titleKey 语言包里的标题 key，如 'login.title'
  * @example useLocaleNavBar('index.title')

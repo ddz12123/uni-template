@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import AppProvider from '@/components/AppProvider.vue'
+import { useLocaleNavBar } from '@/locale'
+
+useLocaleNavBar('index.title')
 </script>
 
 <template>

@@ -2,7 +2,7 @@
 import AppProvider from '@/components/AppProvider.vue'
 import { useLocaleNavBar } from '@/locale'
 
-// 小程序端 pages.json 的 %login.title% 不生效，用 useLocaleNavBar 兜底导航栏标题（H5/App 也一致）
+// 小程序端 %login.title% 只在编译期替换，运行时切换语言不会自动更新，用 useLocaleNavBar 兜底
 useLocaleNavBar('login.title')
 </script>
 

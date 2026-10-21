@@ -1,7 +1,11 @@
 /**
  * HBuilderX 内置模块 `@dcloudio/uni-app` 的最小类型声明。
- * 运行时由 HBuilderX 提供，这里只为 `tsc --noEmit` / 编辑器提示服务。
+ * 运行时由 HBuilderX 提供，这里只为 vue-tsc / 编辑器提示服务。
  */
+
+/** 微信小程序原生全局对象（部分第三方组件类型会直接引用） */
+declare const wx: any
+
 declare module '@dcloudio/uni-app' {
   // ---- 应用级 ----
   export function onLaunch(fn: (options?: Record<string, any>) => void): void

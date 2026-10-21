@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onError, onLaunch, onPageNotFound } from '@dcloudio/uni-app'
+import { onError, onLaunch, onPageNotFound, onShow } from '@dcloudio/uni-app'
 import { syncNativeLocale } from '@/locale'
 import { useAppStore } from '@/store/modules/app'
 import { initErrorReport, reportLog } from '@/utils/report'
@@ -29,6 +29,11 @@ onLaunch(() => {
   // 主题初始化（读取系统主题并注册监听）
   useAppStore().initTheme()
   // 小程序端按持久化语言兜底刷新原生 tabBar 文字（H5/App 由框架处理 %key%）
+  syncNativeLocale()
+})
+
+onShow(() => {
+  // onLaunch 早期 tabBar 可能尚未就绪，回前台时再同步一次
   syncNativeLocale()
 })
 </script>

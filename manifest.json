@@ -6,6 +6,7 @@
   "versionCode": "100",
   "transformPx": false,
   "locale": "zh-Hans",
+  "fallbackLocale": "zh-Hans",
   "app-plus": {
     "usingComponents": true,
     "nvueStyleCompiler": "uni-app",
