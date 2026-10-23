@@ -1,0 +1,12 @@
+# 统一文本文件行尾为 LF，与 .editorconfig(end_of_line = lf) / Prettier(endOfLine: lf) 保持一致。
+# 缺少本文件时，Windows 上 core.autocrlf=true 的克隆/检出会把工作区转成 CRLF，
+# 导致 prettier --check 全量报错、lint-staged 在提交时产生幽灵 diff。
+* text=auto eol=lf
+
+# 二进制资源不做任何转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary

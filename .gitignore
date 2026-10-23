@@ -17,3 +17,7 @@ node_modules/
 # IDE
 .idea/
 .hbuilderx/
+
+# AI 编码工具本地数据（与项目无关）
+.mimosa/
+.zcode/

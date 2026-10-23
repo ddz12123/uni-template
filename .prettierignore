@@ -4,3 +4,5 @@ static
 package-lock.json
 skills-lock.json
 .agents
+.mimosa
+.zcode

@@ -52,8 +52,6 @@ export interface RequestCustom {
   silent?: boolean
   /** 跳过 token 注入及 401 刷新流程，用于公开接口 */
   skipAuth?: boolean
-  /** 内部标记：token 刷新后已重试过 */
-  __retried?: boolean
 }
 
 export interface RequestOptions {
@@ -341,7 +339,7 @@ async function request<T = any>(config: RequestOptions): Promise<T> {
   // 否则登录页输错密码（后端常返回 401）会被误判成“登录过期”吞掉真实报错
   const path = extractPath(config.url)
   const isAuthFree = custom.skipAuth === true || AUTH_FREE_PATHS.has(path)
-  let retried = custom.__retried === true
+  let retried = false
 
   if (custom.loading) {
     showLoading()
