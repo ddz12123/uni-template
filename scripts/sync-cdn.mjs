@@ -66,8 +66,20 @@ for (const filename of envCandidates) {
 }
 
 if (!value) {
+  if (mode === 'production') {
+    console.error(
+      '[sync:cdn] production 模式未找到 VITE_PUBLIC_PATH，请先在 .env.production 中配置 CDN 地址。',
+    )
+    console.error('[sync:cdn] 不会回退 .env.example，避免把本地 /static 当作生产 CDN 前缀。')
+    process.exit(1)
+  }
   value = readEnvKey(resolve(root, '.env.example'), 'VITE_PUBLIC_PATH') ?? ''
   source = value ? '.env.example' : ''
+  if (value) {
+    console.warn(
+      `[sync:cdn] 未在 ${envCandidates.join(' / ')} 中找到 VITE_PUBLIC_PATH，回退使用 .env.example。`,
+    )
+  }
 }
 
 if (!value) {

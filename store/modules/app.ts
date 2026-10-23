@@ -8,6 +8,7 @@ export type ThemeMode = 'light' | 'dark' | 'auto'
 interface NativeThemeConfig {
   navBgColor: string
   navTxtStyle: 'black' | 'white'
+  bgColor: string
   tabBgColor: string
   tabColor: string
   tabSelectedColor: string
@@ -30,6 +31,28 @@ export const useAppStore = defineStore(
       theme.value === 'auto' ? systemTheme.value : theme.value,
     )
 
+    function applyBackgroundColor() {
+      const currentTheme = nativeThemes[resolvedTheme.value]
+      try {
+        uni.setBackgroundColor?.({
+          backgroundColor: currentTheme.bgColor,
+          backgroundColorTop: currentTheme.bgColor,
+          backgroundColorBottom: currentTheme.bgColor,
+        })
+      } catch {
+        // 当前平台不支持动态背景色时忽略
+      }
+      // #ifdef H5
+      // H5 没有原生窗口，直接同步文档背景，避免手动主题与系统主题相反时露出系统底色
+      if (typeof document !== 'undefined') {
+        document.documentElement.style.backgroundColor = currentTheme.bgColor
+        if (document.body) {
+          document.body.style.backgroundColor = currentTheme.bgColor
+        }
+      }
+      // #endif
+    }
+
     function applyNativeTheme() {
       const currentTheme = nativeThemes[resolvedTheme.value]
       try {
@@ -37,6 +60,10 @@ export const useAppStore = defineStore(
           frontColor: currentTheme.navTxtStyle === 'white' ? '#ffffff' : '#000000',
           backgroundColor: currentTheme.navBgColor,
         })
+      } catch {
+        // 当前平台没有原生导航栏时忽略
+      }
+      try {
         uni.setTabBarStyle?.({
           color: currentTheme.tabColor,
           selectedColor: currentTheme.tabSelectedColor,
@@ -45,8 +72,9 @@ export const useAppStore = defineStore(
           borderStyle: currentTheme.tabBorderStyle,
         })
       } catch {
-        // 当前平台没有原生导航栏或 TabBar 时忽略
+        // 当前平台没有 TabBar 时忽略
       }
+      applyBackgroundColor()
     }
 
     function setTheme(mode: ThemeMode) {
@@ -108,6 +136,7 @@ export const useAppStore = defineStore(
       setTheme,
       initTheme,
       applyNativeTheme,
+      applyBackgroundColor,
     }
   },
   {

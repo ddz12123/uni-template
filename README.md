@@ -5,10 +5,10 @@ HBuilderX 原生工程的 uni-app 空白模板（Vue3 + TS + Pinia + Wot UI v2 +
 
 ## 快速开始
 
-0. 先在项目根目录执行 `npm install`。Wot UI、VueUse、持久化插件和 `vue-tsc` 都是 npm 依赖，`node_modules` 不在仓库里；HBuilderX 可能会提示安装，但手动执行一次最稳妥。
+0. 先在项目根目录执行 `npm install`。Wot UI、VueUse、持久化插件和 `vue-tsc` 都是 npm 依赖，`node_modules` 不在仓库里；HBuilderX 可能会提示安装，但手动执行一次最稳妥。工程化命令（`lint` / `format` / `typecheck` / pre-commit）要求 **Node >= 22.22.1**（`lint-staged@17` 的 engines 要求），建议用根目录 `.nvmrc` 切到 22.22.1；运行和发行仍由 HBuilderX 完成，不受此限制。
 1. HBuilderX 打开项目根目录（建议 HBuilderX 5.26 及以上）。
 2. 首次运行按 HBuilderX 提示启用 SCSS/Sass 编译支持。
-3. 微信小程序在 `manifest.json` 填写 `mp-weixin.appid`。
+3. 微信小程序在 `manifest.json` 填写 `mp-weixin.appid`；App 平台打包还需在根 `appid` 填写 DCloud appid。
 4. 根据目标平台填写开发/生产环境的接口地址；切换 CDN 环境时执行 `npm run sync:cdn:dev` / `npm run sync:cdn:prod`（见「静态资源与 CDN」）。
 
 本项目的 Vue3 运行基线是 HBuilderX 5.26 内置的 Vue 3.4.21 / Pinia 2.1.7 / vue-i18n 9.1.9。`npm run lint`、`format`、`typecheck` 是可选检查，但依赖必须先安装；项目不走 CLI 编译，运行和发行仍由 HBuilderX 完成。
@@ -25,6 +25,8 @@ HBuilderX 5.26 的 `uniapp-cli-vite` 编译器内置 Vue 3.4.21、Pinia 2.1.7、
 | `vue-tsc`                     | `2.2.12`                  | 与 TS 5.4 / Vue 3.4 兼容，用于检查 `.vue`             |
 
 升级 HBuilderX 后先确认它的内置 Vue/Pinia 版本，再同步调整这里；不要单独把 `@vueuse/core` 升到 12+、把持久化插件升到 4.2+。
+
+Node 版本只约束本地工程化工具（ESLint / Prettier / vue-tsc / husky + lint-staged），最低 22.22.1，与 HBuilderX 的运行基线无关。仓库根目录的 `.nvmrc` 与 `package.json` 的 `engines` 保持一致。
 
 ## 目录结构
 
@@ -54,10 +56,13 @@ await http.get('/public/config', undefined, { custom: { skipAuth: true } }) // �
 ```
 
 直接返回业务 data，失败抛 `ApiError` 并统一弹 toast（`silent: true` 关闭）。
+只有 `code` 为数字且同时带 `msg` 或 `data` 的响应才会按统一结构解析（`isApiEnvelope`），
+避免业务数据里自带 `code` 字段（如 `{ code: 'CN', name: 'China' }`）时被误判为错误；
 token 自动注入（`/auth/login` 与刷新接口免带）；公开接口可用 `custom.skipAuth` 跳过 token 和 401 刷新流程；
 401 自动单飞刷新 token 并重放原请求，
 刷新失败清登录态并 `reLaunch` 到登录页（已在登录页不再跳转，登录成功后按 `redirect` 回跳）。
-接口约定改 `config/index.ts` 的 `SUCCESS_CODE` / `REFRESH_TOKEN_URL`。
+并发 401 只提示、只跳转一次；刷新期间用户主动退出或切换账号会丢弃本次刷新结果。
+接口约定改 `config/index.ts` 的 `SUCCESS_CODE` / `REFRESH_TOKEN_URL`，响应结构改 `utils/request/index.ts` 的 `isApiEnvelope`。
 
 ### 登录页与登录态
 
@@ -70,6 +75,8 @@ token 自动注入（`/auth/login` 与刷新接口免带）；公开接口可用
 4. 使用 `uni.reLaunch({ url: redirect || '/pages/index/index' })` 回到原页面。
 
 令牌只由 `utils/auth.ts` 持久化，Pinia 中的 `token` / `refreshToken` 只是响应式镜像；Pinia 只持久化 `userInfo`，避免出现两套登录态。
+`setToken(token, refreshToken)` 会取消 401 后挂起的登录页跳转；不传 `refreshToken` 时会清除旧值，避免换账号后继续沿用上一个账号的令牌。
+手动退出请调用 `useUserStore().logout()`（内部同样会取消挂起的跳转）；`reset()` 只负责清空数据，不要用它替代 `logout()`。
 
 ### 全局分享（utils/share.ts）
 
@@ -96,18 +103,22 @@ export default {
 - 异常链路：Vue 渲染报错（`main.ts errorHandler`）→ 小程序脚本错误（`App onError`）
   → 未捕获 Promise（`onUnhandledRejection`）→ 野路径（`onPageNotFound` 上报并回首页），统一进 `reportLog`
 - 上报节流：`reportLog` 相同错误合并（`extra.repeatCount` 记次数），同批次最多 20 条、队列 200 条，
-  后台延迟 ≤3 秒发送，应用进入后台前会主动 flush，发送失败会重新入队；`VITE_REPORT_URL` 留空则只打印不发送
+  后台延迟 ≤3 秒发送，应用进入后台前会主动 flush；发送失败按 3s/6s 指数退避，单条最多发送 3 次，
+  4xx（408/429 除外）直接丢弃，避免上报地址或鉴权配置错误时无限重试；`VITE_REPORT_URL` 留空时不发送（仅开发环境打印）
 
 ### 主题
 
 - `uni.scss`：编译期变量（`$app-*`），保留官方 `$uni-*` 兼容市场插件
-- `styles/tokens.scss`：运行时变量（`--app-*`），暗黑经媒体查询 + `.app-theme-dark` 覆盖层
-- `theme.json`：原生导航栏 / tabBar 深浅色，`pages.json` 里用 `@变量名` 引用；
+- `styles/tokens.scss`：运行时变量（`--app-*`），暗黑经媒体查询 + `.app-theme-dark` 覆盖层；
+  深色下 `--app-primary` 与 `theme.json` 的 `dark.tabSelectedColor` 保持一致
+- `theme.json`：原生导航栏 / tabBar / 窗口背景色，`pages.json` 里用 `@变量名` 引用；
   **`darkmode` 与 `themeLocation` 配在 `manifest.json -> mp-weixin` 下**（官方 DarkMode 指南要求写在
   manifest 的平台节点；写在 `pages.json` 时 `darkmode` 不会进编译产物 `app.json`，缺它微信就不做变量替换，
   `@navBgColor` 会被当成非法颜色值）。改完重新编译，以 `unpackage/dist/.../app.json` 里能看到
   `"darkmode": true` 为准
-- 组件库暗黑由 `AppProvider` 的 `wd-config-provider` 联动；调用 `useAppStore().setTheme()` 时会同步原生导航栏和 tabBar
+- 组件库暗黑由 `AppProvider` 的 `wd-config-provider` 联动；调用 `useAppStore().setTheme()` 时会同步原生导航栏、tabBar
+  和窗口背景色（`setBackgroundColor`），页面显示时也会再同步一次背景，手动主题与系统主题相反时下拉/回弹区域不会露系统底色
+- H5 额外同步 `document` 背景色；小程序和 App 的窗口背景由 `uni.setBackgroundColor` 设置
 
 ### 小程序启动优化
 
@@ -127,7 +138,7 @@ export default {
 | 变量                | 说明                                                                        |
 | ------------------- | --------------------------------------------------------------------------- |
 | `VITE_APP_BASE_URL` | 接口地址（「运行」加载 `.env.development`，「发行」加载 `.env.production`） |
-| `VITE_REPORT_URL`   | 日志上报地址，留空只打印                                                    |
+| `VITE_REPORT_URL`   | 日志上报地址；留空时不发送，仅开发环境打印到控制台                          |
 | `VITE_PUBLIC_PATH`  | 静态资源公共前缀：本地 `/static`，生产为 CDN 地址（见下节）                 |
 
 代码中 `import.meta.env.VITE_XXX` 访问。
@@ -162,7 +173,9 @@ export default {
   注意：HBuilderX 会把 `uni.scss` 原样注入每个页面的 SCSS 编译单元，所以不要在 `uni.scss` 里用相对路径 `@use` 其他 scss 文件（路径会按页面目录解析，页面样式会编译失败）。
 
 - **切换环境**：`npm run sync:cdn:dev` 读取 `.env.development`，`npm run sync:cdn:prod` 读取 `.env.production`，也可以 `npm run sync:cdn -- staging` 读取 `.env.staging`。
-  脚本按 `.env.<mode>.local > .env.<mode> > .env.local > .env` 的顺序找 `VITE_PUBLIC_PATH`，最后回退 `.env.example`，把值写入 `uni.scss` 的 `cdn-start` / `cdn-end` 标记之间。
+  脚本按 `.env.<mode>.local > .env.<mode> > .env.local > .env` 的顺序找 `VITE_PUBLIC_PATH`；
+  非 production 模式都找不到时回退 `.env.example` 并打印警告，production 模式直接报错（避免把本地 `/static` 当成生产 CDN），
+  把值写入 `uni.scss` 的 `cdn-start` / `cdn-end` 标记之间。
   切换开发/发行环境后需要重新执行对应命令；仓库默认保留开发值 `/static`。
 - **发行切换 CDN**：改 `.env.production` 的 `VITE_PUBLIC_PATH` → 执行 `npm run sync:cdn:prod` → HBuilderX 发行；并在微信公众平台配置 `downloadFile` 合法域名。
 - **不要用 `import img from '@/static/xx.png'`** 引用业务资源：import 会把资源打进小程序包（主包上限 2M）且切 CDN 后失效；`static/` 目录只保留必须随包的资源（如 tabBar 图标）。
@@ -224,7 +237,7 @@ useLocaleNavBar('index.title')
 ## 新项目初始化清单
 
 - 修改 `manifest.json.name`，它是应用名称唯一来源。
-- 填写微信小程序 `mp-weixin.appid`，并检查目标平台的包名、签名和隐私协议配置。
+- 填写微信小程序 `mp-weixin.appid`；App 平台打包还需在 `manifest.json` 根 `appid` 填写 DCloud appid，并检查目标平台的包名、签名和隐私协议配置。
 - `manifest.json -> mp-weixin.setting.urlCheck` 默认保持 `true`；开发环境也应配置合法的接口域名，不要用关闭校验的方式掩盖域名配置问题。
 - `manifest.json -> distribute.android` 默认不声明额外权限；只有确实使用对应原生能力时才逐项申请，并同步隐私说明。
 - `manifest.json -> mp-weixin` 下的 `darkmode` / `themeLocation` / `lazyCodeLoading` 保持现状（已在位），改 `theme.json` 变量名时同步 `pages.json` 的 `@引用`。

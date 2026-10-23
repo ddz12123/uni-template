@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "企业级开箱即用的 uni-app HBuilderX 模板（Vue3 + TS + Pinia + Wot UI v2）",
+  "engines": {
+    "node": ">=22.22.1"
+  },
   "scripts": {
     "sync:cdn": "node scripts/sync-cdn.mjs",
     "sync:cdn:dev": "node scripts/sync-cdn.mjs development",

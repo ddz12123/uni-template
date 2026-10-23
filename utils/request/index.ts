@@ -4,6 +4,7 @@
  * - 统一响应结构与错误码处理，业务侧直接拿到 data，失败抛 ApiError
  * - 401 单飞无感刷新 + 原请求重放（免登录接口不进刷新流程，避免登录报错被误判成过期）；
  *   刷新失败清空登录态，提示后回到登录页
+ * - 并发 401 只提示/跳转一次；刷新期间用户主动退出或切换账号时丢弃刷新结果
  */
 import {
   LOGIN_PATH,
@@ -13,7 +14,7 @@ import {
   UNAUTHORIZED_CODE,
 } from '@/config'
 import { t } from '@/locale'
-import { clearTokens, getRefreshToken, getToken, saveTokens } from '@/utils/auth'
+import { clearTokens, getAuthEpoch, getRefreshToken, getToken, saveTokens } from '@/utils/auth'
 
 /** 登录态全局事件：请求层与 user store 之间用事件解耦，避免循环依赖 */
 export const AUTH_EVENTS = {
@@ -26,8 +27,21 @@ export const AUTH_EVENTS = {
 /** 后端统一响应结构（按你们的接口约定调整 SUCCESS_CODE 与字段名） */
 export interface ApiResponse<T = any> {
   code: number
-  msg: string
-  data: T
+  msg?: string
+  data?: T
+}
+
+/**
+ * 判断响应是否为统一响应结构。
+ * 仅凭 `code` 字段存在会把业务数据（如国家表返回 `{ code: 'CN', name: 'China' }`）误判成错误响应，
+ * 因此要求 code 为数字，并且同时带 msg 或 data。后端字段约定不同时改这里。
+ */
+export function isApiEnvelope<T = any>(body: unknown): body is ApiResponse<T> {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return false
+  }
+  const record = body as Record<string, unknown>
+  return typeof record.code === 'number' && ('msg' in record || 'data' in record)
 }
 
 /** 请求级扩展配置 */
@@ -65,6 +79,9 @@ export class ApiError extends Error {
     this.code = code
   }
 }
+
+/** 刷新期间登录态被用户主动清除/切换：不属于“登录过期”，不提示也不跳转 */
+class AuthAbortedError extends Error {}
 
 /** 将 path 归一化为可比较的形式，兼容 query、域名、前导/尾部斜杠。 */
 function normalizePath(url: string): string {
@@ -160,24 +177,38 @@ let refreshPromise: Promise<void> | null = null
 function refreshTokenOnce(): Promise<void> {
   refreshPromise ??= (async () => {
     const refreshToken = getRefreshToken()
+    const epoch = getAuthEpoch()
     if (!refreshToken) {
       throw new ApiError(UNAUTHORIZED_CODE, t('request.refreshFailed'))
     }
-    const res = await rawRequest({
-      url: REFRESH_TOKEN_URL,
-      method: 'POST',
-      data: { refreshToken },
-    })
-    const body = res.data as ApiResponse<{ token: string; refreshToken?: string }> | undefined
-    const data = body?.data
+    let res: RawResponse
+    try {
+      res = await rawRequest({
+        url: REFRESH_TOKEN_URL,
+        method: 'POST',
+        data: { refreshToken },
+      })
+    } catch (error) {
+      // 刷新请求失败时同样要判断期间是否已主动退出，避免多余的过期提示
+      if (getAuthEpoch() !== epoch) {
+        throw new AuthAbortedError()
+      }
+      throw error
+    }
+    // 用户在刷新请求期间主动退出或切换账号：丢弃结果，避免把旧 token 又写回来
+    if (getAuthEpoch() !== epoch) {
+      throw new AuthAbortedError()
+    }
+    const body: unknown = res.data
     if (
       res.statusCode >= 400 ||
-      !body ||
-      body.code !== SUCCESS_CODE ||
-      !data ||
-      typeof data.token !== 'string' ||
-      !data.token
+      !isApiEnvelope<{ token: string; refreshToken?: string }>(body) ||
+      body.code !== SUCCESS_CODE
     ) {
+      throw new ApiError(UNAUTHORIZED_CODE, t('request.refreshFailed'))
+    }
+    const data = body.data
+    if (!data || typeof data.token !== 'string' || !data.token) {
       throw new ApiError(UNAUTHORIZED_CODE, t('request.refreshFailed'))
     }
     const nextRefreshToken =
@@ -187,8 +218,8 @@ function refreshTokenOnce(): Promise<void> {
     clearPendingLogout()
     // 通知 user store 同步新 token（store 监听 AUTH_EVENTS.refreshed）
     uni.$emit(AUTH_EVENTS.refreshed, {
-      token: body.data.token,
-      refreshToken: body.data.refreshToken,
+      token: data.token,
+      refreshToken: data.refreshToken,
     })
   })().finally(() => {
     refreshPromise = null
@@ -200,8 +231,19 @@ function refreshTokenOnce(): Promise<void> {
 const LOGOUT_REDIRECT_DELAY_MS = 1500
 
 let logoutTimer: ReturnType<typeof setTimeout> | undefined
+/** 已安排跳转，用于并发 401 去重 */
+let logoutHandled = false
+/** 已提示过登录过期，避免并发 401 连续弹 toast */
+let logoutNotified = false
 
-function clearPendingLogout(): void {
+/**
+ * 取消可能挂起的强制登出跳转并复位去重状态。
+ * 登录成功（user store 的 setToken）与手动退出（logout）时会调用，
+ * 避免用户已经重新登录后又被旧定时器踢回登录页。
+ */
+export function clearPendingLogout(): void {
+  logoutHandled = false
+  logoutNotified = false
   if (logoutTimer) {
     clearTimeout(logoutTimer)
     logoutTimer = undefined
@@ -242,12 +284,23 @@ function getCurrentPageUrl(): string {
 /**
  * 刷新失败：清空登录态，提示后回到登录页。
  * - 已在登录页：只清不跳，避免循环
- * - 并发多个请求同时失败：只跳一次
+ * - 并发多个请求同时失败：只提示、只跳一次
  */
-function forceLogout(): void {
+function forceLogout(silent = false): void {
   clearTokens()
   uni.$emit(AUTH_EVENTS.logout)
-  if (logoutTimer) {
+  const notify = () => {
+    if (logoutNotified) {
+      return
+    }
+    logoutNotified = true
+    uni.showToast({ title: t('request.authExpired'), icon: 'none' })
+  }
+  if (logoutHandled) {
+    // 首个触发者可能是 silent 请求，后续非 silent 请求补一次提示即可
+    if (!silent) {
+      notify()
+    }
     return
   }
   let target = LOGIN_PATH
@@ -263,8 +316,15 @@ function forceLogout(): void {
   } catch {
     // 取页面栈失败仍按默认目标跳
   }
+  logoutHandled = true
+  if (!silent) {
+    notify()
+  }
   logoutTimer = setTimeout(() => {
     logoutTimer = undefined
+    // 跳转完成后复位，用户未登录又回到业务页时仍能再次被踢回登录页
+    logoutHandled = false
+    logoutNotified = false
     try {
       uni.reLaunch({ url: target })
     } catch {
@@ -314,11 +374,11 @@ async function request<T = any>(config: RequestOptions): Promise<T> {
           throw new ApiError(res.statusCode, message)
         }
 
-        // 业务层错误：非统一结构（如文件流）原样放行由调用方处理
-        const body = res.data as ApiResponse<T>
-        if (body && typeof body === 'object' && 'code' in body) {
+        // 业务层错误：只有符合统一响应结构才解析，文件流等裸数据原样放行由调用方处理
+        const body: unknown = res.data
+        if (isApiEnvelope<T>(body)) {
           if (body.code === SUCCESS_CODE) {
-            return body.data
+            return body.data as T
           }
           throw new ApiError(
             body.code,
@@ -332,22 +392,19 @@ async function request<T = any>(config: RequestOptions): Promise<T> {
           retried = true
           try {
             await refreshTokenOnce()
-          } catch {
-            // 先提示再跳（forceLogout 内延迟跳转，保证 toast 可见）；silent 只省掉提示，仍会跳登录页
-            if (!custom.silent) {
-              uni.showToast({ title: t('request.authExpired'), icon: 'none' })
+          } catch (refreshError) {
+            // 用户已主动退出/切换账号：不提示也不跳转，直接把原请求按失败返回
+            if (refreshError instanceof AuthAbortedError) {
+              throw new ApiError(UNAUTHORIZED_CODE, t('request.authExpired'))
             }
-            forceLogout()
+            forceLogout(custom.silent === true)
             throw new ApiError(UNAUTHORIZED_CODE, t('request.authExpired'))
           }
           continue
         }
 
         if (isUnauthorized && !isAuthFree) {
-          if (!custom.silent) {
-            uni.showToast({ title: t('request.authExpired'), icon: 'none' })
-          }
-          forceLogout()
+          forceLogout(custom.silent === true)
           throw new ApiError(UNAUTHORIZED_CODE, t('request.authExpired'))
         }
 

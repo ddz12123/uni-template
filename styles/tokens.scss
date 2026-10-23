@@ -20,6 +20,9 @@ page {
 }
 
 @mixin app-dark-vars {
+  /* 与 theme.json 的 dark.tabSelectedColor 保持一致 */
+  --app-primary: #7da3ff;
+
   --app-bg: #111214;
   --app-bg-card: #1d1e22;
 
@@ -43,6 +46,7 @@ page {
 }
 
 .app-theme-light {
+  --app-primary: #4d80f0;
   --app-bg: #f5f6f9;
   --app-bg-card: #fff;
 

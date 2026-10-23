@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { pinia } from '@/store'
 import { clearTokens, getRefreshToken, getToken, saveTokens } from '@/utils/auth'
-import { AUTH_EVENTS } from '@/utils/request'
+import { AUTH_EVENTS, clearPendingLogout } from '@/utils/request'
 
 export interface UserInfo {
   id: string
@@ -26,10 +26,11 @@ export const useUserStore = defineStore(
 
     function setToken(newToken: string, newRefreshToken?: string) {
       token.value = newToken
-      if (newRefreshToken) {
-        refreshToken.value = newRefreshToken
-      }
+      // 未返回 refreshToken 时同步清空镜像，与 saveTokens 的持久化语义保持一致
+      refreshToken.value = newRefreshToken ?? ''
       saveTokens(newToken, newRefreshToken)
+      // 登录成功：取消 401 后挂起的“回登录页”跳转
+      clearPendingLogout()
     }
 
     function reset() {
@@ -38,11 +39,13 @@ export const useUserStore = defineStore(
       userInfo.value = null
       // 清空响应式登录态，磁盘侧 token 也一并清理，
       // 避免只调 reset() 时 uni storage 里残留旧 token。
+      // 注意：不要在这里取消挂起的登出跳转——forceLogout 会先 emit logout 再设置定时器。
       clearTokens()
     }
 
-    /** 退出登录：清空 store 与 token 缓存 */
+    /** 退出登录：清空 store 与 token 缓存，并取消可能挂起的 401 强制跳转 */
     function logout() {
+      clearPendingLogout()
       reset()
     }
 
