@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { onError, onLaunch, onPageNotFound, onShow } from '@dcloudio/uni-app'
+import { onError, onHide, onLaunch, onPageNotFound, onShow } from '@dcloudio/uni-app'
 import { syncNativeLocale } from '@/locale'
 import { useAppStore } from '@/store/modules/app'
-import { initErrorReport, reportLog } from '@/utils/report'
+import { flushReportQueue, initErrorReport, reportLog } from '@/utils/report'
 import { checkMiniProgramUpdate } from '@/utils/update'
 
 // uni-app Vue3 官方应用生命周期：onError 与小程序 App.onError 时机一致，
@@ -34,7 +34,12 @@ onLaunch(() => {
 
 onShow(() => {
   // onLaunch 早期 tabBar 可能尚未就绪，回前台时再同步一次
+  useAppStore().applyNativeTheme()
   syncNativeLocale()
+})
+
+onHide(() => {
+  flushReportQueue()
 })
 </script>
 

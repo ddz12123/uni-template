@@ -49,11 +49,13 @@ utils/                       request 请求层 / auth / storage / static（静�
 import { http } from '@/utils/request'
 
 const data = await http.get<UserInfo>('/user/info', { id: 1 })
-await http.post('/demo/form', data, { loading: true }) // 请求级选项：loading / silent
+await http.post('/demo/form', data, { custom: { loading: true } }) // 请求级选项：loading / silent / skipAuth
+await http.get('/public/config', undefined, { custom: { skipAuth: true } }) // 公开接口
 ```
 
 直接返回业务 data，失败抛 `ApiError` 并统一弹 toast（`silent: true` 关闭）。
-token 自动注入（`/auth/login` 与刷新接口免带）；401 自动单飞刷新 token 并重放原请求，
+token 自动注入（`/auth/login` 与刷新接口免带）；公开接口可用 `custom.skipAuth` 跳过 token 和 401 刷新流程；
+401 自动单飞刷新 token 并重放原请求，
 刷新失败清登录态并 `reLaunch` 到登录页（已在登录页不再跳转，登录成功后按 `redirect` 回跳）。
 接口约定改 `config/index.ts` 的 `SUCCESS_CODE` / `REFRESH_TOKEN_URL`。
 
@@ -91,10 +93,10 @@ export default {
 ### 版本更新与异常
 
 - 版本更新：`App.onLaunch` 调 `checkMiniProgramUpdate()`，有新包下载就绪后弹窗提示重启
-- 异常链路：Vue 渲染报错（`main.ts errorHandler`）→ 小程序脚本错误（`App onError` + `uni.onError` 兜底）
+- 异常链路：Vue 渲染报错（`main.ts errorHandler`）→ 小程序脚本错误（`App onError`）
   → 未捕获 Promise（`onUnhandledRejection`）→ 野路径（`onPageNotFound` 上报并回首页），统一进 `reportLog`
 - 上报节流：`reportLog` 相同错误合并（`extra.repeatCount` 记次数），同批次最多 20 条、队列 200 条，
-  后台延迟 ≤3 秒发送；`VITE_REPORT_URL` 留空则只打印不发送
+  后台延迟 ≤3 秒发送，应用进入后台前会主动 flush，发送失败会重新入队；`VITE_REPORT_URL` 留空则只打印不发送
 
 ### 主题
 
@@ -223,6 +225,8 @@ useLocaleNavBar('index.title')
 
 - 修改 `manifest.json.name`，它是应用名称唯一来源。
 - 填写微信小程序 `mp-weixin.appid`，并检查目标平台的包名、签名和隐私协议配置。
+- `manifest.json -> mp-weixin.setting.urlCheck` 默认保持 `true`；开发环境也应配置合法的接口域名，不要用关闭校验的方式掩盖域名配置问题。
+- `manifest.json -> distribute.android` 默认不声明额外权限；只有确实使用对应原生能力时才逐项申请，并同步隐私说明。
 - `manifest.json -> mp-weixin` 下的 `darkmode` / `themeLocation` / `lazyCodeLoading` 保持现状（已在位），改 `theme.json` 变量名时同步 `pages.json` 的 `@引用`。
 - 确认 `manifest.json` 的 `locale` / `fallbackLocale` 与默认语言一致（小程序原生标题默认值由 `fallbackLocale` 决定）。
 - 按环境填写接口地址；开发/发行切换时执行 `npm run sync:cdn:dev` / `npm run sync:cdn:prod`。

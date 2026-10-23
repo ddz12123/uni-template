@@ -30,8 +30,8 @@ export const useAppStore = defineStore(
       theme.value === 'auto' ? systemTheme.value : theme.value,
     )
 
-    function syncNativeTheme(mode: 'light' | 'dark') {
-      const currentTheme = nativeThemes[mode]
+    function applyNativeTheme() {
+      const currentTheme = nativeThemes[resolvedTheme.value]
       try {
         uni.setNavigationBarColor?.({
           frontColor: currentTheme.navTxtStyle === 'white' ? '#ffffff' : '#000000',
@@ -51,7 +51,7 @@ export const useAppStore = defineStore(
 
     function setTheme(mode: ThemeMode) {
       theme.value = mode
-      syncNativeTheme(resolvedTheme.value)
+      applyNativeTheme()
     }
 
     /** App 启动时调用：读取系统信息并注册主题变化监听 */
@@ -69,7 +69,7 @@ export const useAppStore = defineStore(
         const prefersDark = usePreferredDark()
         const applySystemTheme = (value: boolean) => {
           systemTheme.value = value ? 'dark' : 'light'
-          syncNativeTheme(resolvedTheme.value)
+          applyNativeTheme()
         }
         applySystemTheme(prefersDark.value)
         watch(prefersDark, applySystemTheme)
@@ -89,7 +89,7 @@ export const useAppStore = defineStore(
         uni.onThemeChange?.((res) => {
           if (res && (res.theme === 'light' || res.theme === 'dark')) {
             systemTheme.value = res.theme
-            syncNativeTheme(resolvedTheme.value)
+            applyNativeTheme()
           }
         })
       } catch {
@@ -97,10 +97,18 @@ export const useAppStore = defineStore(
       }
       // #endif
 
-      syncNativeTheme(resolvedTheme.value)
+      applyNativeTheme()
     }
 
-    return { theme, systemTheme, statusBarHeight, resolvedTheme, setTheme, initTheme }
+    return {
+      theme,
+      systemTheme,
+      statusBarHeight,
+      resolvedTheme,
+      setTheme,
+      initTheme,
+      applyNativeTheme,
+    }
   },
   {
     persist: {

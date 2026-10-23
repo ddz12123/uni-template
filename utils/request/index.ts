@@ -12,6 +12,7 @@ import {
   SUCCESS_CODE,
   UNAUTHORIZED_CODE,
 } from '@/config'
+import { t } from '@/locale'
 import { clearTokens, getRefreshToken, getToken, saveTokens } from '@/utils/auth'
 
 /** 登录态全局事件：请求层与 user store 之间用事件解耦，避免循环依赖 */
@@ -35,6 +36,8 @@ export interface RequestCustom {
   loading?: boolean
   /** 静默模式：失败不弹 toast（业务自行处理） */
   silent?: boolean
+  /** 跳过 token 注入及 401 刷新流程，用于公开接口 */
+  skipAuth?: boolean
   /** 内部标记：token 刷新后已重试过 */
   __retried?: boolean
 }
@@ -63,8 +66,16 @@ export class ApiError extends Error {
   }
 }
 
+/** 将 path 归一化为可比较的形式，兼容 query、域名、前导/尾部斜杠。 */
+function normalizePath(url: string): string {
+  const noQuery = (url || '').split(/[?#]/, 1)[0]
+  const path = noQuery.replace(/^https?:\/\/[^/]+/i, '')
+  const withLeadingSlash = path.startsWith('/') ? path : `/${path}`
+  return withLeadingSlash.replace(/\/+$/, '') || '/'
+}
+
 /** 无需携带 token 的接口（如登录 / 刷新本身），按接口约定维护（均为 path 形式） */
-const AUTH_FREE_PATHS: string[] = ['/auth/login', REFRESH_TOKEN_URL]
+const AUTH_FREE_PATHS = new Set(['/auth/login', REFRESH_TOKEN_URL].map(normalizePath))
 
 /**
  * baseURL 归一化：缺失时给 '' 兜底（避免拼出 `undefined/xxx`），并去掉尾部斜杠
@@ -85,14 +96,13 @@ function joinURL(url: string): string {
 
 /** 取接口 path（去掉域名与 query）：绝对/相对地址统一为 `/xxx` 形式，用于白名单比对 */
 function extractPath(url: string): string {
-  const noQuery = (url || '').split('?')[0]
-  return noQuery.replace(/^https?:\/\/[^/]+/, '') || '/'
+  return normalizePath(url)
 }
 
 let loadingCount = 0
 function showLoading() {
   loadingCount += 1
-  uni.showLoading({ title: '加载中...', mask: true })
+  uni.showLoading({ title: t('request.loading'), mask: true })
 }
 /**
  * loading 计数：并发请求只在全部结束后关一次。
@@ -130,10 +140,11 @@ function rawRequest(options: {
       timeout: options.timeout ?? REQUEST_TIMEOUT,
       success: resolve as any,
       fail: (err) => {
+        const message = String(err?.errMsg ?? '').toLowerCase()
         reject(
           new ApiError(
             -1,
-            err?.errMsg?.includes('timeout') ? '请求超时，请稍后重试' : '网络异常，请检查网络',
+            message.includes('timeout') ? t('request.timeout') : t('request.networkError'),
           ),
         )
       },
@@ -150,18 +161,28 @@ function refreshTokenOnce(): Promise<void> {
   refreshPromise ??= (async () => {
     const refreshToken = getRefreshToken()
     if (!refreshToken) {
-      throw new ApiError(UNAUTHORIZED_CODE, '登录已过期')
+      throw new ApiError(UNAUTHORIZED_CODE, t('request.refreshFailed'))
     }
     const res = await rawRequest({
       url: REFRESH_TOKEN_URL,
       method: 'POST',
       data: { refreshToken },
     })
-    const body = res.data as ApiResponse<{ token: string; refreshToken: string }>
-    if (res.statusCode >= 400 || !body || body.code !== SUCCESS_CODE) {
-      throw new ApiError(UNAUTHORIZED_CODE, '刷新登录态失败')
+    const body = res.data as ApiResponse<{ token: string; refreshToken?: string }> | undefined
+    const data = body?.data
+    if (
+      res.statusCode >= 400 ||
+      !body ||
+      body.code !== SUCCESS_CODE ||
+      !data ||
+      typeof data.token !== 'string' ||
+      !data.token
+    ) {
+      throw new ApiError(UNAUTHORIZED_CODE, t('request.refreshFailed'))
     }
-    saveTokens(body.data.token, body.data.refreshToken)
+    const nextRefreshToken =
+      typeof data.refreshToken === 'string' && data.refreshToken ? data.refreshToken : refreshToken
+    saveTokens(data.token, nextRefreshToken)
     // 刷新成功说明登录态有效：取消可能挂起的登出跳转（极端并发时序下用）
     clearPendingLogout()
     // 通知 user store 同步新 token（store 监听 AUTH_EVENTS.refreshed）
@@ -187,6 +208,37 @@ function clearPendingLogout(): void {
   }
 }
 
+/** 获取当前页面完整路径，保留扫码或分享进入时的 query 参数。 */
+function getCurrentPageUrl(): string {
+  try {
+    const pages = getCurrentPages()
+    const current = pages[pages.length - 1] as
+      | {
+          route?: string
+          options?: Record<string, unknown>
+          $page?: { fullPath?: string }
+        }
+      | undefined
+    const fullPath = current?.$page?.fullPath
+    if (typeof fullPath === 'string' && fullPath) {
+      return fullPath.startsWith('/') ? fullPath : `/${fullPath}`
+    }
+
+    const route = current?.route
+    if (!route) {
+      return ''
+    }
+    const path = route.startsWith('/') ? route : `/${route}`
+    const query = Object.entries(current.options ?? {})
+      .filter(([, value]) => value !== undefined && value !== null)
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
+      .join('&')
+    return query ? `${path}?${query}` : path
+  } catch {
+    return ''
+  }
+}
+
 /**
  * 刷新失败：清空登录态，提示后回到登录页。
  * - 已在登录页：只清不跳，避免循环
@@ -200,14 +252,13 @@ function forceLogout(): void {
   }
   let target = LOGIN_PATH
   try {
-    const pages = getCurrentPages()
-    const current = ((pages[pages.length - 1] as any)?.route ?? '') as string
+    const current = getCurrentPageUrl()
     // route 为无前导斜杠形式（如 `pages/index/index`），LOGIN_PATH 带前导斜杠，需统一比对
-    if (current && `/${current}` === LOGIN_PATH) {
+    if (current && extractPath(current) === normalizePath(LOGIN_PATH)) {
       return
     }
     if (current) {
-      target = `${LOGIN_PATH}?redirect=${encodeURIComponent(`/${current}`)}`
+      target = `${LOGIN_PATH}?redirect=${encodeURIComponent(current)}`
     }
   } catch {
     // 取页面栈失败仍按默认目标跳
@@ -229,68 +280,83 @@ async function request<T = any>(config: RequestOptions): Promise<T> {
   // 绝对/相对地址统一按 path 比对白名单；白名单请求（如登录）不进刷新流程，
   // 否则登录页输错密码（后端常返回 401）会被误判成“登录过期”吞掉真实报错
   const path = extractPath(config.url)
-  const isAuthFree = AUTH_FREE_PATHS.includes(path)
+  const isAuthFree = custom.skipAuth === true || AUTH_FREE_PATHS.has(path)
+  let retried = custom.__retried === true
 
   if (custom.loading) {
     showLoading()
   }
   try {
-    // token 注入
-    const header = { ...config.header }
-    const token = getToken()
-    if (token && !isAuthFree) {
-      header.Authorization = `Bearer ${token}`
-    }
-
-    const res = await rawRequest({
-      url: config.url,
-      method: config.method,
-      data: config.data,
-      header,
-      timeout: config.timeout,
-    })
-
-    // HTTP 层错误
-    if (res.statusCode >= 400) {
-      const body = res.data as ApiResponse | undefined
-      throw new ApiError(
-        res.statusCode,
-        (body && typeof body === 'object' && 'msg' in body && body.msg) ||
-          `请求失败（${res.statusCode}）`,
-      )
-    }
-
-    // 业务层错误：非统一结构（如文件流）原样放行由调用方处理
-    const body = res.data as ApiResponse<T>
-    if (body && typeof body === 'object' && 'code' in body) {
-      if (body.code === SUCCESS_CODE) {
-        return body.data
-      }
-      throw new ApiError(body.code, body.msg || '请求失败')
-    }
-    return res.data as T
-  } catch (error) {
-    // 401 且未重试过、且不是免登录接口：刷新 token 后重放一次原请求
-    const isUnauthorized = error instanceof ApiError && error.code === UNAUTHORIZED_CODE
-    if (isUnauthorized && !isAuthFree && !custom.__retried) {
+    while (true) {
       try {
-        await refreshTokenOnce()
-      } catch {
-        // 先提示再跳（forceLogout 内延迟跳转，保证 toast 可见）；silent 只省掉提示，仍会跳登录页
-        if (!custom.silent) {
-          uni.showToast({ title: '登录已过期，请重新登录', icon: 'none' })
+        // token 注入
+        const header = { ...config.header }
+        const token = getToken()
+        if (token && !isAuthFree) {
+          header.Authorization = `Bearer ${token}`
         }
-        forceLogout()
-        throw new ApiError(UNAUTHORIZED_CODE, '登录已过期，请重新登录')
+
+        const res = await rawRequest({
+          url: config.url,
+          method: config.method,
+          data: config.data,
+          header,
+          timeout: config.timeout,
+        })
+
+        // HTTP 层错误
+        if (res.statusCode >= 400) {
+          const body = res.data as ApiResponse | undefined
+          const message =
+            body && typeof body === 'object' && typeof body.msg === 'string' && body.msg
+              ? body.msg
+              : t('request.httpError', { code: res.statusCode })
+          throw new ApiError(res.statusCode, message)
+        }
+
+        // 业务层错误：非统一结构（如文件流）原样放行由调用方处理
+        const body = res.data as ApiResponse<T>
+        if (body && typeof body === 'object' && 'code' in body) {
+          if (body.code === SUCCESS_CODE) {
+            return body.data
+          }
+          throw new ApiError(
+            body.code,
+            typeof body.msg === 'string' && body.msg ? body.msg : t('request.failed'),
+          )
+        }
+        return res.data as T
+      } catch (error) {
+        const isUnauthorized = error instanceof ApiError && error.code === UNAUTHORIZED_CODE
+        if (isUnauthorized && !isAuthFree && !retried) {
+          retried = true
+          try {
+            await refreshTokenOnce()
+          } catch {
+            // 先提示再跳（forceLogout 内延迟跳转，保证 toast 可见）；silent 只省掉提示，仍会跳登录页
+            if (!custom.silent) {
+              uni.showToast({ title: t('request.authExpired'), icon: 'none' })
+            }
+            forceLogout()
+            throw new ApiError(UNAUTHORIZED_CODE, t('request.authExpired'))
+          }
+          continue
+        }
+
+        if (isUnauthorized && !isAuthFree) {
+          if (!custom.silent) {
+            uni.showToast({ title: t('request.authExpired'), icon: 'none' })
+          }
+          forceLogout()
+          throw new ApiError(UNAUTHORIZED_CODE, t('request.authExpired'))
+        }
+
+        if (!custom.silent && error instanceof ApiError) {
+          uni.showToast({ title: error.message, icon: 'none' })
+        }
+        throw error
       }
-      // await 保证外层 finally 的 hideLoading 等待重放结束后再执行；
-      // 重放若再抛错会直接透传给调用方（不会重新进入本 catch，不会重复提示）
-      return await request<T>({ ...config, custom: { ...custom, __retried: true } })
     }
-    if (!custom.silent && error instanceof ApiError && error.code !== UNAUTHORIZED_CODE) {
-      uni.showToast({ title: error.message, icon: 'none' })
-    }
-    throw error
   } finally {
     if (custom.loading) {
       hideLoading()

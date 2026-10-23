@@ -78,11 +78,11 @@ function scheduleFlush() {
 }
 
 /** 相同错误合并为一条（extra.repeatCount 记次数），超限的按批次发，队列满了丢最旧的 */
-function enqueueReport(entry: ReportPayload) {
+function enqueueReport(entry: ReportPayload, count = 1) {
   const key = reportKey(entry)
   const hit = pendingReports.get(key)
   if (hit) {
-    hit.count += 1
+    hit.count += count
   } else {
     if (pendingReports.size >= MAX_QUEUE) {
       const oldest = pendingReports.keys().next()
@@ -91,7 +91,7 @@ function enqueueReport(entry: ReportPayload) {
       }
       droppedCount += 1
     }
-    pendingReports.set(key, { entry, count: 1 })
+    pendingReports.set(key, { entry, count })
   }
   scheduleFlush()
 }
@@ -110,20 +110,32 @@ function flushReports() {
   for (const [key] of batch) {
     pendingReports.delete(key)
   }
+  const droppedForBatch = droppedCount
   batch.forEach(([, { entry, count }], index) => {
     const payload: ReportPayload = { ...entry }
     if (count > 1) {
       payload.extra = { ...(payload.extra ?? {}), repeatCount: count }
     }
-    if (index === 0 && droppedCount > 0) {
-      payload.extra = { ...(payload.extra ?? {}), dropped: droppedCount }
-      droppedCount = 0
+    if (index === 0 && droppedForBatch > 0) {
+      payload.extra = { ...(payload.extra ?? {}), dropped: droppedForBatch }
     }
     uni.request({
       url,
       method: 'POST',
       data: payload,
-      fail: () => {},
+      success: (response) => {
+        if (response?.statusCode >= 400) {
+          enqueueReport(entry, count)
+          return
+        }
+        if (index === 0 && droppedForBatch > 0) {
+          droppedCount = Math.max(0, droppedCount - droppedForBatch)
+        }
+      },
+      fail: () => {
+        // 请求失败时放回队列，避免网络抖动直接丢失错误记录。
+        enqueueReport(entry, count)
+      },
     })
   })
   if (pendingReports.size > 0) {
@@ -131,16 +143,17 @@ function flushReports() {
   }
 }
 
+/** 立即发送当前队列，通常在应用进入后台前调用。 */
+export function flushReportQueue() {
+  if (flushTimer) {
+    clearTimeout(flushTimer)
+    flushTimer = undefined
+  }
+  flushReports()
+}
+
 /** 注册全局未捕获异常监听；App 级 onError 在 App.vue 中通过 onError 钩子捕获 */
 export function initErrorReport() {
-  // 小程序 App.onError 兜底：与 App.vue 的 onError 互为备份，避免某一处失效导致漏报
-  try {
-    uni.onError?.((message: string) => {
-      reportLog({ type: 'error', message: `uni.onError: ${message}` })
-    })
-  } catch {
-    // 部分平台不支持，忽略
-  }
   try {
     uni.onUnhandledRejection?.(((res: { reason?: unknown }) => {
       const reason = res?.reason

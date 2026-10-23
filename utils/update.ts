@@ -1,3 +1,4 @@
+import { t } from '@/locale'
 import { reportLog } from './report'
 
 /**
@@ -18,10 +19,10 @@ export function checkMiniProgramUpdate(): void {
     })
     manager.onUpdateReady?.(() => {
       uni.showModal({
-        title: '发现新版本',
-        content: '新版本已下载完成，是否立即重启应用？',
-        confirmText: '立即重启',
-        cancelText: '稍后',
+        title: t('update.title'),
+        content: t('update.content'),
+        confirmText: t('update.confirm'),
+        cancelText: t('update.cancel'),
         success: (res) => {
           if (res.confirm) {
             manager.applyUpdate()
@@ -31,7 +32,7 @@ export function checkMiniProgramUpdate(): void {
     })
     manager.onUpdateFailed?.((err) => {
       reportLog({ type: 'error', message: `UpdateFailed: ${JSON.stringify(err)}` })
-      uni.showToast({ title: '新版本下载失败，请稍后重试', icon: 'none' })
+      uni.showToast({ title: t('update.failed'), icon: 'none' })
     })
   } catch {
     // 低版本基础库可能不支持，忽略

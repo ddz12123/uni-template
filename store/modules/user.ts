@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { pinia } from '@/store'
 import { clearTokens, getRefreshToken, getToken, saveTokens } from '@/utils/auth'
 import { AUTH_EVENTS } from '@/utils/request'
 
@@ -72,7 +73,7 @@ function handleTokenRefreshed(payload: unknown) {
   if (!data || typeof data.token !== 'string') {
     return
   }
-  const store = useUserStore()
+  const store = useUserStore(pinia)
   store.token = data.token
   if (data.refreshToken) {
     store.refreshToken = data.refreshToken
@@ -80,7 +81,7 @@ function handleTokenRefreshed(payload: unknown) {
 }
 
 function handleAuthLogout() {
-  useUserStore().reset()
+  useUserStore(pinia).reset()
 }
 
 uni.$off(AUTH_EVENTS.refreshed, handleTokenRefreshed)
